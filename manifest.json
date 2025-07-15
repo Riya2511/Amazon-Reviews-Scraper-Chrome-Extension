@@ -1,0 +1,18 @@
+{
+    "manifest_version": 3,
+    "name": "AMZ Competitive Intelligence",
+    "version": "1.0",
+    "description": "Get current tab URL and cookies",
+    "permissions": [
+      "activeTab",
+      "cookies",
+      "tabs",
+      "scripting"
+    ],
+    "host_permissions": [
+      "<all_urls>"
+    ],
+    "action": {
+      "default_popup": "popup.html"
+    }
+  }
