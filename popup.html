@@ -4,16 +4,18 @@
   <title>Share URL & Cookies</title>
   <style>
     body {
-      width: 200px;
-      height: 100px;
+      width: 280px;
+      height: 150px;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
       background-color: #0a0a0a;
       color: #ffffff;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       margin: 0;
-      padding: 0;
+      padding: 15px;
+      box-sizing: border-box;
     }
     button {
       padding: 10px 20px;
@@ -26,6 +28,7 @@
       font-weight: 500;
       transition: all 0.3s ease;
       box-shadow: 0 2px 8px rgba(0, 212, 255, 0.3);
+      margin-bottom: 10px;
     }
     button:hover {
       transform: translateY(-1px);
@@ -35,10 +38,48 @@
     button:active {
       transform: translateY(0);
     }
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+    #status {
+      font-size: 12px;
+      text-align: center;
+      min-height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 5px;
+      border-radius: 4px;
+      margin-top: 5px;
+      transition: all 0.3s ease;
+    }
+    .status-success {
+      background-color: rgba(0, 212, 255, 0.1);
+      color: #00d4ff;
+      border: 1px solid rgba(0, 212, 255, 0.3);
+    }
+    .status-error {
+      background-color: rgba(255, 100, 100, 0.1);
+      color: #ff6464;
+      border: 1px solid rgba(255, 100, 100, 0.3);
+    }
+    .status-warning {
+      background-color: rgba(255, 200, 100, 0.1);
+      color: #ffc864;
+      border: 1px solid rgba(255, 200, 100, 0.3);
+    }
+    .status-info {
+      background-color: rgba(150, 150, 255, 0.1);
+      color: #9696ff;
+      border: 1px solid rgba(150, 150, 255, 0.3);
+    }
   </style>
 </head>
 <body>
   <button id="shareBtn">Share URL & Cookies</button>
+  <div id="status"></div>
   <script src="popup.js"></script>
 </body>
 </html>
