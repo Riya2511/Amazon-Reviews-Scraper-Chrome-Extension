@@ -298,7 +298,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log("Reviews stored in window.scrapedReviews for easy access");
         
         // Send success status with data to trigger download
-        sendStatus(`✅ ${reviews.length} reviews saved to Downloads!`, 'success', scrapedData);
+        sendStatus(`${reviews.length} reviews saved to Downloads!`, 'success', scrapedData);
         
       })
       .catch(error => {

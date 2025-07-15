@@ -1,48 +1,95 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Share URL & Cookies</title>
+  <title>EcomPulse.AI - Extract Product Reviews</title>
   <style>
+    html {
+      border-radius: 12px;
+      overflow: hidden;
+    }
     body {
-      width: 280px;
-      height: 150px;
+      width: 300px;
+      min-height: 180px;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      background-color: #0a0a0a;
+      background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
       color: #ffffff;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       margin: 0;
-      padding: 15px;
+      padding: 25px 20px;
       box-sizing: border-box;
+      border-radius: 12px;
+      overflow: hidden;
     }
+
+    .logo-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+
+    .logo {
+      width: 40px;
+      height: 40px;
+      margin-right: 12px;
+    }
+
+    .brand-text {
+      font-size: 24px;
+      font-weight: 600;
+      color: #ffffff;
+      letter-spacing: -0.5px;
+    }
+
+    .brand-text .ai {
+      background: linear-gradient(135deg, #00d4ff 0%, #7c3aed 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
     button {
-      padding: 10px 20px;
+      padding: 12px 24px;
       font-size: 14px;
-      background: linear-gradient(135deg, #00d4ff 0%, #00b8d4 100%);
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
       color: white;
       border: none;
-      border-radius: 6px;
+      border-radius: 8px;
       cursor: pointer;
-      font-weight: 500;
+      font-weight: 600;
       transition: all 0.3s ease;
-      box-shadow: 0 2px 8px rgba(0, 212, 255, 0.3);
-      margin-bottom: 10px;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+      margin-bottom: 15px;
+      min-width: 200px;
     }
+
     button:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(0, 212, 255, 0.4);
-      background: linear-gradient(135deg, #00e5ff 0%, #00c9e0 100%);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
+      background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
     }
+
     button:active {
       transform: translateY(0);
     }
+
     button:disabled {
       opacity: 0.6;
       cursor: not-allowed;
       transform: none;
     }
+
+    .login-notice {
+      font-size: 11px;
+      color: #9ca3af;
+      text-align: center;
+      line-height: 1.4;
+      margin-top: 5px;
+    }
+
     #status {
       font-size: 12px;
       text-align: center;
@@ -50,35 +97,52 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 5px;
-      border-radius: 4px;
-      margin-top: 5px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      margin-top: 10px;
       transition: all 0.3s ease;
+      max-width: 100%;
+      word-wrap: break-word;
+      line-height: 1.4;
     }
+
     .status-success {
-      background-color: rgba(0, 212, 255, 0.1);
-      color: #00d4ff;
-      border: 1px solid rgba(0, 212, 255, 0.3);
+      background-color: rgba(16, 185, 129, 0.1);
+      color: #10b981;
+      border: 1px solid rgba(16, 185, 129, 0.3);
     }
+
     .status-error {
-      background-color: rgba(255, 100, 100, 0.1);
-      color: #ff6464;
-      border: 1px solid rgba(255, 100, 100, 0.3);
+      background-color: rgba(239, 68, 68, 0.1);
+      color: #ef4444;
+      border: 1px solid rgba(239, 68, 68, 0.3);
     }
+
     .status-warning {
-      background-color: rgba(255, 200, 100, 0.1);
-      color: #ffc864;
-      border: 1px solid rgba(255, 200, 100, 0.3);
+      background-color: rgba(245, 158, 11, 0.1);
+      color: #f59e0b;
+      border: 1px solid rgba(245, 158, 11, 0.3);
     }
+
     .status-info {
-      background-color: rgba(150, 150, 255, 0.1);
-      color: #9696ff;
-      border: 1px solid rgba(150, 150, 255, 0.3);
+      background-color: rgba(59, 130, 246, 0.1);
+      color: #3b82f6;
+      border: 1px solid rgba(59, 130, 246, 0.3);
     }
   </style>
 </head>
 <body>
-  <button id="shareBtn">Share URL & Cookies</button>
+  <div class="logo-container">
+    <img src="logo.png" alt="EcomPulse Logo" class="logo">
+    <div class="brand-text">EcomPulse<span class="ai">.AI</span></div>
+  </div>
+  
+  <button id="shareBtn">Extract Product Reviews</button>
+  
+  <div class="login-notice">
+    * You must be login to an Amazon<br>account before scraping.
+  </div>
+  
   <div id="status"></div>
   <script src="popup.js"></script>
 </body>
