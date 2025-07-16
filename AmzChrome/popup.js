@@ -34,10 +34,16 @@ async function updateStats() {
     
     // Show/hide download button
     const downloadBtn = document.getElementById('downloadBtn');
-    if (productCount > 0) {
-      downloadBtn.classList.add('visible');
+    if (downloadBtn) {
+      if (productCount > 0) {
+        console.log(`[STATS] Showing download button, ${productCount} products found`);
+        downloadBtn.classList.add('visible');
+      } else {
+        console.log('[STATS] Hiding download button, no products found');
+        downloadBtn.classList.remove('visible');
+      }
     } else {
-      downloadBtn.classList.remove('visible');
+      console.error('[STATS] Download button element not found!');
     }
   } catch (error) {
     console.error('[STATS] Error updating stats:', error);
@@ -53,6 +59,12 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Load and display current stats
     updateStats();
+    
+    // Add click handler to KPI cards to refresh stats
+    document.querySelector('.kpi-section').addEventListener('click', () => {
+      console.log('[DEBUG] Manual stats refresh triggered');
+      updateStats();
+    });
     
     // Header click to open website
     headerLink.addEventListener('click', () => {
@@ -228,22 +240,33 @@ document.addEventListener('DOMContentLoaded', () => {
             };
             
             // Save back to storage
-            await chrome.storage.local.set({ scrapedData: existingData });
-            console.log('[SCRAPER] Saved to storage:', existingData);
-            
-            // Show completion message with next steps
-            const productCount = Object.keys(existingData.products).length;
-            if (productCount === 1) {
-              showStatus(`Complete! Added ${request.totalReviews} reviews. Navigate to next product or download.`, 'success');
-            } else {
-              showStatus(`Complete! Added ${request.totalReviews} reviews. Total: ${productCount} products. Navigate to next or download.`, 'success');
+            try {
+              await chrome.storage.local.set({ scrapedData: existingData });
+              console.log('[SCRAPER] ✅ Successfully saved to storage:', existingData);
+              
+              // Verify storage was saved
+              const verification = await chrome.storage.local.get(['scrapedData']);
+              console.log('[SCRAPER] Storage verification:', verification);
+              
+              // Show completion message with next steps
+              const productCount = Object.keys(existingData.products).length;
+              if (productCount === 1) {
+                showStatus(`Complete! Added ${request.totalReviews} reviews. Navigate to next product or download.`, 'success');
+              } else {
+                showStatus(`Complete! Added ${request.totalReviews} reviews. Total: ${productCount} products. Navigate to next or download.`, 'success');
+              }
+              document.getElementById('extractBtn').disabled = false;
+              
+              // Force update stats multiple times to ensure UI updates
+              updateStats();
+              setTimeout(() => updateStats(), 500);
+              setTimeout(() => updateStats(), 1000);
+              
+            } catch (error) {
+              console.error('[SCRAPER] ❌ Error saving to storage:', error);
+              showStatus('Error saving data', 'error');
+              document.getElementById('extractBtn').disabled = false;
             }
-            document.getElementById('extractBtn').disabled = false;
-            
-            // Force update stats with a small delay to ensure storage is written
-            setTimeout(() => {
-              updateStats(); // Update the KPIs
-            }, 100);
             
             chrome.runtime.onMessage.removeListener(resultListener);
           } else if (request.action === 'page_update') {

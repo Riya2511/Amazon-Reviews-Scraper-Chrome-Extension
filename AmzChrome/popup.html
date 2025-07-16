@@ -167,11 +167,17 @@
       align-items: center;
       justify-content: center;
       gap: 6px;
+      min-width: 100px;
     }
 
-    .download-button:hover {
+    .download-button:hover:not(:disabled) {
       background-color: #404040;
       border-color: #5a5a5a;
+    }
+    
+    .download-button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
 
     .download-button.visible {
