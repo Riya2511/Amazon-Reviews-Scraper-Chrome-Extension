@@ -8,6 +8,23 @@ async function debugStorage() {
 // Log storage state on popup open
 debugStorage();
 
+// Function to ensure proper storage structure
+function ensureStorageStructure(data) {
+  if (!data || typeof data !== 'object') {
+    return { products: {}, productInfo: [] };
+  }
+  
+  if (!data.products || typeof data.products !== 'object') {
+    data.products = {};
+  }
+  
+  if (!data.productInfo || !Array.isArray(data.productInfo)) {
+    data.productInfo = [];
+  }
+  
+  return data;
+}
+
 // Function to show status messages (moved outside for global access)
 function showStatus(message, type = 'info') {
   const statusDiv = document.getElementById('status');
@@ -24,15 +41,36 @@ function showStatus(message, type = 'info') {
   }
 }
 
+function convertProductInfoToCSV(products) {
+  const headers = ['asin', 'url', 'title', 'brand', 'price', 'rating', 'ratings_count', 'availability', 'features', 'category', 'seller_info', 'shop_url', 'is_prime', 'extractedAt'];
+  const rows = products.map(p => 
+    headers.map(h => {
+      let value = p[h] || '';
+      // Handle arrays (features) by joining with semicolons
+      if (Array.isArray(value)) {
+        value = value.join('; ');
+      }
+      // Handle boolean values
+      if (typeof value === 'boolean') {
+        value = value.toString();
+      }
+      return `"${String(value).replace(/"/g, '""')}"`;
+    }).join(',')
+  );
+  return [headers.join(','), ...rows].join('\n');
+}
+
 // Function to update stats from storage
 async function updateStats() {
   try {
     const result = await chrome.storage.local.get(['scrapedData']);
-    const data = result.scrapedData || { products: {} };
+    const data = ensureStorageStructure(result.scrapedData);
     
     console.log('[STATS] Storage data:', data);
     
     const productCount = Object.keys(data.products || {}).length;
+    const productInfoCount = (data.productInfo || []).length;
+
     const reviewCount = Object.values(data.products || {}).reduce((total, product) => {
       return total + (product.reviews ? product.reviews.length : 0);
     }, 0);
@@ -41,9 +79,11 @@ async function updateStats() {
     
     // Update UI elements if they exist
     const productsCountEl = document.getElementById('productsCount');
+    const productInfoEl = document.getElementById('productsInfo')
     const reviewsCountEl = document.getElementById('reviewsCount');
     if (productsCountEl) productsCountEl.textContent = productCount;
     if (reviewsCountEl) reviewsCountEl.textContent = reviewCount;
+    if (productInfoEl) productInfoEl.textContent = productInfoCount;
     
     // Download button is always visible now
     console.log(`[STATS] Current data: ${productCount} products with ${reviewCount} reviews`);
@@ -58,6 +98,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const extractBtn = document.getElementById('extractBtn');
     const downloadBtn = document.getElementById('downloadBtn');
     const headerLink = document.getElementById('headerLink');
+    const extractProdBtn = document.getElementById('extractProdBtn');
     const productsCountEl = document.getElementById('productsCount');
     const reviewsCountEl = document.getElementById('reviewsCount');
     
@@ -77,17 +118,131 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     
     // Add click handler to KPI cards to refresh stats
-    document.querySelector('.kpi-section').addEventListener('click', () => {
-      console.log('[DEBUG] Manual stats refresh triggered');
-      updateStats();
-    });
-    
-    // Header click to open website
-    headerLink.addEventListener('click', () => {
-      chrome.tabs.create({ url: 'https://www.Ecompulse.ai' });
-    });
+    const kpiSection = document.querySelector('.kpi-section');
+    if (kpiSection) {
+      kpiSection.addEventListener('click', () => {
+        console.log('[DEBUG] Manual stats refresh triggered');
+        updateStats();
+      });
+    }
 
-    // Download button click handler
+    extractProdBtn.addEventListener('click', async () => {
+      extractProdBtn.disabled = true;
+      showStatus('Extracting product info...', 'info');
+    
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const url = tab.url;
+    
+      if (!url.includes('amazon.com')) {
+        showStatus('Please navigate to an Amazon product page', 'warning');
+        extractProdBtn.disabled = false;
+        return;
+      }
+    
+      // Get ASIN
+      let asinMatch = url.match(/\/dp\/([A-Z0-9]{10})/i) ||
+                      url.match(/\/gp\/product\/([A-Z0-9]{10})/i);
+      if (!asinMatch) {
+        showStatus('Could not find ASIN in URL', 'error');
+        extractProdBtn.disabled = false;
+        return;
+      }
+    
+      const asin = asinMatch[1];
+    
+      chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: () => {
+          const q = (s) => document.querySelector(s);
+    
+          const title = q('#productTitle')?.textContent?.trim() || '';
+          const brand = q('#bylineInfo')?.textContent?.trim() || '';
+          const price = q('span.a-offscreen')?.textContent?.trim() || '';
+          const rating = q('span.a-icon-alt')?.textContent?.trim() || '';
+          const ratings_count = q('#acrCustomerReviewText')?.textContent?.trim() || '';
+          const availability = q('#availability span')?.textContent?.trim() || '';
+    
+          const features = Array.from(document.querySelectorAll('#feature-bullets span.a-list-item'))
+            .map(el => el.textContent.trim()).filter(Boolean);
+    
+          const category = Array.from(document.querySelectorAll('#wayfinding-breadcrumbs_feature_div a'))
+            .map(el => el.textContent.trim()).filter(Boolean).join(' > ');
+    
+          const sellerElem = Array.from(document.querySelectorAll('span'))
+            .find(el => el.textContent.includes('Ships from'));
+          const seller_info = sellerElem ? sellerElem.parentElement?.textContent?.trim() : '';
+    
+          const shopLink = q('a[href*="/stores/"]');
+          let shop_url = '';
+          if (shopLink) {
+            const href = shopLink.getAttribute('href');
+            if (href.startsWith('/')) {
+              shop_url = 'https://www.amazon.com' + href;
+            } else if (href.startsWith('http')) {
+              shop_url = href;
+            }
+          }
+    
+          const prime = !!(q('i[class*="prime"]') || 
+                           document.querySelector('span:contains("Prime")') || 
+                           q('img[alt*="Prime"]'));
+    
+          return { title, brand, price, rating, ratings_count, availability, features, category, seller_info, shop_url, is_prime: prime };
+        }
+      }, async (results) => {
+        if (chrome.runtime.lastError || !results[0]) {
+          console.error('Script error:', chrome.runtime.lastError);
+          showStatus('Failed to extract product info', 'error');
+          extractProdBtn.disabled = false;
+          return;
+        }
+    
+        const { title, brand, price, rating, ratings_count, availability, features, category, seller_info, shop_url, is_prime } = results[0].result;
+    
+        const productData = {
+          asin,
+          url,
+          title,
+          brand,
+          price,
+          rating,
+          ratings_count,
+          availability,
+          features,
+          category,
+          seller_info,
+          shop_url,
+          is_prime,
+          extractedAt: new Date().toISOString()
+        };
+    
+        try {
+          const result = await chrome.storage.local.get(['scrapedData']);
+          const data = ensureStorageStructure(result.scrapedData);
+          data.productInfo.push(productData);
+    
+          await chrome.storage.local.set({ scrapedData: data });
+    
+          showStatus(`Product extracted: ${title}`, 'success');
+          extractProdBtn.disabled = false;
+    
+          await updateStats();
+        } catch (error) {
+          console.error('Error saving product info:', error);
+          showStatus('Failed to save product info', 'error');
+          extractProdBtn.disabled = false;
+        }
+      });
+    });    
+
+    // Header click to open website
+    if (headerLink) {
+      headerLink.addEventListener('click', () => {
+        chrome.tabs.create({ url: 'https://www.Ecompulse.ai' });
+      });
+    }
+
+    // Download button click handler - FIXED VERSION
     downloadBtn.addEventListener('click', async () => {
       // Prevent multiple clicks
       if (downloadBtn.disabled) return;
@@ -96,68 +251,98 @@ document.addEventListener('DOMContentLoaded', async () => {
         downloadBtn.disabled = true;
         showStatus('Preparing download...', 'info');
         
-        // Get all stored data
-        const result = await chrome.storage.local.get(['scrapedData']);
-        const data = result.scrapedData || { products: {} };
+        // Generate timestamp FIRST (move this to the top)
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         
-        if (Object.keys(data.products).length === 0) {
+        // Get all stored data with proper structure
+        const result = await chrome.storage.local.get(['scrapedData']);
+        const data = ensureStorageStructure(result.scrapedData);
+        
+        // Check if we have any data to download
+        const hasProducts = Object.keys(data.products || {}).length > 0;
+        const hasProductInfo = (data.productInfo || []).length > 0;
+        
+        if (!hasProducts && !hasProductInfo) {
           showStatus('No data to download', 'warning');
           downloadBtn.disabled = false;
           return;
         }
-        
-        // Combine all products' data
-        const combinedData = {
-          metadata: {
-            totalProducts: Object.keys(data.products).length,
-            totalReviews: 0,
-            exportDate: new Date().toISOString(),
-            products: []
-          },
-          reviews: []
-        };
-        
-        // Merge all reviews with product metadata
-        Object.values(data.products).forEach(product => {
-          combinedData.metadata.products.push({
-            asin: product.metadata.asin,
-            productName: product.metadata.productName,
-            reviewCount: product.reviews.length
+
+        // Download product info if available
+        if (hasProductInfo) {
+          const productInfoCSV = convertProductInfoToCSV(data.productInfo);
+          const blob = new Blob([productInfoCSV], { type: 'text/csv' });
+          const url = URL.createObjectURL(blob);
+          const filename = `Ecompulse_amz_productInfo_${timestamp}.csv`;
+
+          chrome.runtime.sendMessage({
+            action: 'download',
+            url: url,
+            filename: filename
+          }, (response) => {
+            if (response && response.success) {
+              console.log(`Download started for ${filename}`);
+            } else {
+              console.error('Download failed:', response?.error);
+            }
+            URL.revokeObjectURL(url);
+          });          
+        }
+
+        // Download reviews if available
+        if (hasProducts) {
+          // Combine all products' data
+          const combinedData = {
+            metadata: {
+              totalProducts: Object.keys(data.products).length,
+              totalReviews: 0,
+              exportDate: new Date().toISOString(),
+              products: []
+            },
+            reviews: []
+          };
+          
+          // Merge all reviews with product metadata
+          Object.values(data.products).forEach(product => {
+            if (product && product.metadata && product.reviews) {
+              combinedData.metadata.products.push({
+                asin: product.metadata.asin,
+                productName: product.metadata.productName,
+                reviewCount: product.reviews.length
+              });
+              combinedData.metadata.totalReviews += product.reviews.length;
+              
+              // Add product metadata to each review
+              const enrichedReviews = product.reviews.map(review => ({
+                ...review,
+                productAsin: product.metadata.asin,
+                productName: product.metadata.productName,
+                productUrl: product.metadata.originalUrl
+              }));
+              
+              combinedData.reviews = combinedData.reviews.concat(enrichedReviews);
+            }
           });
-          combinedData.metadata.totalReviews += product.reviews.length;
           
-          // Add product metadata to each review
-          const enrichedReviews = product.reviews.map(review => ({
-            ...review,
-            productAsin: product.metadata.asin,
-            productName: product.metadata.productName,
-            productUrl: product.metadata.originalUrl
-          }));
+          // Generate filename with timestamp
+          const reviewsFilename = `Ecompulse_amz_reviews_${timestamp}.csv`;
           
-          combinedData.reviews = combinedData.reviews.concat(enrichedReviews);
-        });
-        
-        // Generate filename with timestamp
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const filename = `Ecompulse_amz_reviews_${timestamp}.csv`;
-        
-        // Save to downloads
-        saveToDownloads(combinedData, 'multi-product');
+          // Save to downloads
+          saveToDownloads(combinedData, 'multi-product');
+          
+          showStatus(`Downloaded ${combinedData.metadata.totalReviews} reviews from ${combinedData.metadata.totalProducts} products`, 'success');
+        }
         
         // Clear storage after successful download
         await chrome.storage.local.remove(['scrapedData']);
-        
-        showStatus(`Downloaded ${combinedData.metadata.totalReviews} reviews from ${combinedData.metadata.totalProducts} products`, 'success');
         
         // Reset UI
         await updateStats();
         downloadBtn.disabled = false;
         
-        // Button stays visible after download
-        
       } catch (error) {
         console.error('Download error:', error);
-        showStatus('Download failed', 'error');
+        showStatus('Download failed: ' + error.message, 'error');
         downloadBtn.disabled = false;
       }
     });
@@ -251,26 +436,27 @@ document.addEventListener('DOMContentLoaded', async () => {
           if (request.action === 'all_pages_complete') {
             console.log(`[SCRAPER] 🎉 Received all ${request.totalReviews} reviews from ${request.pagesScraped} pages`);
             
-            // Save to storage instead of downloading
-            const result = await chrome.storage.local.get(['scrapedData']);
-            const existingData = result.scrapedData || { products: {} };
-            
-            // Add this product's data
-            existingData.products[asin] = {
-              metadata: {
-                asin: asin,
-                originalUrl: reviewsUrl,
-                reviewsUrl: reviewsUrl,
-                scrapeDate: new Date().toISOString(),
-                totalReviews: request.allReviews.length,
-                pagesScraped: request.pagesScraped,
-                productName: request.productName
-              },
-              reviews: request.allReviews
-            };
-            
-            // Save back to storage
+            // Save to storage with proper structure
             try {
+              const result = await chrome.storage.local.get(['scrapedData']);
+              const existingData = ensureStorageStructure(result.scrapedData);
+              const uniqueKey = `${asin}_${Date.now()}`;
+              
+              // Add this product's data
+              existingData.products[uniqueKey] = {
+                metadata: {
+                  asin: asin,
+                  originalUrl: reviewsUrl,
+                  reviewsUrl: reviewsUrl,
+                  scrapeDate: new Date().toISOString(),
+                  totalReviews: request.allReviews.length,
+                  pagesScraped: request.pagesScraped,
+                  productName: request.productName
+                },
+                reviews: request.allReviews
+              };
+              
+              // Save back to storage
               await chrome.storage.local.set({ scrapedData: existingData });
               console.log('[SCRAPER] ✅ Successfully saved to storage:', existingData);
               
