@@ -15,23 +15,31 @@ function showStatus(message, type = 'info') {
 
 // Function to update stats from storage
 async function updateStats() {
-  const result = await chrome.storage.local.get(['scrapedData']);
-  const data = result.scrapedData || { products: {} };
-  
-  const productCount = Object.keys(data.products || {}).length;
-  const reviewCount = Object.values(data.products || {}).reduce((total, product) => {
-    return total + (product.reviews ? product.reviews.length : 0);
-  }, 0);
-  
-  document.getElementById('productsCount').textContent = productCount;
-  document.getElementById('reviewsCount').textContent = reviewCount;
-  
-  // Show/hide download button
-  const downloadBtn = document.getElementById('downloadBtn');
-  if (productCount > 0) {
-    downloadBtn.classList.add('visible');
-  } else {
-    downloadBtn.classList.remove('visible');
+  try {
+    const result = await chrome.storage.local.get(['scrapedData']);
+    const data = result.scrapedData || { products: {} };
+    
+    console.log('[STATS] Storage data:', data);
+    
+    const productCount = Object.keys(data.products || {}).length;
+    const reviewCount = Object.values(data.products || {}).reduce((total, product) => {
+      return total + (product.reviews ? product.reviews.length : 0);
+    }, 0);
+    
+    console.log(`[STATS] Products: ${productCount}, Reviews: ${reviewCount}`);
+    
+    document.getElementById('productsCount').textContent = productCount;
+    document.getElementById('reviewsCount').textContent = reviewCount;
+    
+    // Show/hide download button
+    const downloadBtn = document.getElementById('downloadBtn');
+    if (productCount > 0) {
+      downloadBtn.classList.add('visible');
+    } else {
+      downloadBtn.classList.remove('visible');
+    }
+  } catch (error) {
+    console.error('[STATS] Error updating stats:', error);
   }
 }
 
@@ -121,95 +129,53 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Check if URL contains amazon
         if (!url.includes('amazon.com')) {
-          showStatus('Please navigate to an Amazon reviews page', 'warning');
+          showStatus('Please navigate to an Amazon product or reviews page', 'warning');
           extractBtn.disabled = false;
           return;
         }
         
         let asin, reviewsUrl;
         
-        // Check if already on reviews page
-        if (url.includes('/product-reviews/')) {
-          const asinMatch = url.match(/\/product-reviews\/([A-Z0-9]{10})/);
-          if (asinMatch) {
-            asin = asinMatch[1];
-            reviewsUrl = url; // Use current URL as starting point
-          } else {
-            showStatus('Could not find product ASIN in reviews URL', 'error');
-            extractBtn.disabled = false;
-            return;
-          }
-        } else {
-          // Extract ASIN from product page URL
-          const asinMatch = url.match(/\/dp\/([A-Z0-9]{10})/);
-          if (!asinMatch) {
-            showStatus('Could not find product ASIN in URL', 'error');
-            extractBtn.disabled = false;
-            return;
-          }
-          
-          asin = asinMatch[1];
-          // Construct the reviews URL
-          reviewsUrl = `https://www.amazon.com/product-reviews/${asin}/ref=cm_cr_dp_d_show_all_btm?ie=UTF8&reviewerType=all_reviews`;
+        // Try multiple ASIN extraction patterns
+        let asinMatch = url.match(/\/dp\/([A-Z0-9]{10})/i) || 
+                       url.match(/\/product-reviews\/([A-Z0-9]{10})/i) ||
+                       url.match(/\/gp\/product\/([A-Z0-9]{10})/i) ||
+                       url.match(/\/([A-Z0-9]{10})(?:\/|$|\?)/i);
+        
+        if (!asinMatch) {
+          showStatus('Could not find product ASIN in URL', 'error');
+          extractBtn.disabled = false;
+          return;
         }
         
-        showStatus('Starting multi-page scraping...', 'info');
+        asin = asinMatch[1];
         
-        // Use comprehensive multi-page scraping
-        console.log('[SCRAPER] Using comprehensive multi-page scraping approach...');
-        chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          func: performMultiPageScraping,
-          args: [asin, -1] // maxPages = -1 means scrape all available pages
-        }, (results) => {
-          if (chrome.runtime.lastError) {
-            console.error('[SCRAPER] ❌ Script injection error:', chrome.runtime.lastError);
-            showStatus('Failed to inject scraping script', 'error');
-            extractBtn.disabled = false;
-          } else {
-            console.log('[SCRAPER] ✅ Multi-page scraping script injected successfully');
-            
-            // Listen for results
-            chrome.runtime.onMessage.addListener(async function resultListener(request) {
-              if (request.action === 'all_pages_complete') {
-                console.log(`[SCRAPER] 🎉 Received all ${request.totalReviews} reviews from ${request.pagesScraped} pages`);
+        // Always construct the reviews URL, regardless of current page
+        reviewsUrl = `https://www.amazon.com/product-reviews/${asin}/ref=cm_cr_dp_d_show_all_btm?ie=UTF8&reviewerType=all_reviews`;
+        
+        // Check if we need to navigate to reviews page
+        if (!url.includes('/product-reviews/')) {
+          showStatus('Navigating to reviews page...', 'info');
+          
+          // Navigate to reviews page first
+          chrome.tabs.update(tab.id, { url: reviewsUrl }, () => {
+            // Wait for page to load
+            chrome.tabs.onUpdated.addListener(function listener(tabId, changeInfo) {
+              if (tabId === tab.id && changeInfo.status === 'complete') {
+                chrome.tabs.onUpdated.removeListener(listener);
                 
-                // Save to storage instead of downloading
-                const result = await chrome.storage.local.get(['scrapedData']);
-                const existingData = result.scrapedData || { products: {} };
-                
-                // Add this product's data
-                existingData.products[asin] = {
-                  metadata: {
-                    asin: asin,
-                    originalUrl: reviewsUrl,
-                    reviewsUrl: reviewsUrl,
-                    scrapeDate: new Date().toISOString(),
-                    totalReviews: request.allReviews.length,
-                    pagesScraped: request.pagesScraped,
-                    productName: request.productName
-                  },
-                  reviews: request.allReviews
-                };
-                
-                // Save back to storage
-                await chrome.storage.local.set({ scrapedData: existingData });
-                
-                showStatus(`Added ${request.totalReviews} reviews from ${request.productName || 'product'}`, 'success');
-                extractBtn.disabled = false;
-                updateStats(); // Update the KPIs
-                chrome.runtime.onMessage.removeListener(resultListener);
-              } else if (request.action === 'page_update') {
-                showStatus(request.message, 'info');
-              } else if (request.action === 'scraping_failed') {
-                console.error('[SCRAPER] ❌ Scraping failed:', request.message);
-                showStatus(request.message || 'Scraping failed', 'error');
-                extractBtn.disabled = false;
-                chrome.runtime.onMessage.removeListener(resultListener);
+                // Small delay to ensure page is ready
+                setTimeout(() => {
+                  startScraping(tab, asin, reviewsUrl);
+                }, 1000);
               }
             });
-          }
-        });
+          });
+        } else {
+          // Already on reviews page, start scraping
+          startScraping(tab, asin, reviewsUrl);
+        }
+        
         
       } catch (error) {
         console.error('Error:', error);
@@ -218,6 +184,73 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   });
+  
+  // Function to start the scraping process
+  function startScraping(tab, asin, reviewsUrl) {
+    showStatus('Starting multi-page scraping...', 'info');
+    
+    // Use comprehensive multi-page scraping
+    console.log('[SCRAPER] Using comprehensive multi-page scraping approach...');
+    chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: performMultiPageScraping,
+      args: [asin, -1] // maxPages = -1 means scrape all available pages
+    }, (results) => {
+      if (chrome.runtime.lastError) {
+        console.error('[SCRAPER] ❌ Script injection error:', chrome.runtime.lastError);
+        showStatus('Failed to inject scraping script', 'error');
+        document.getElementById('extractBtn').disabled = false;
+      } else {
+        console.log('[SCRAPER] ✅ Multi-page scraping script injected successfully');
+        
+        // Listen for results
+        chrome.runtime.onMessage.addListener(async function resultListener(request) {
+          if (request.action === 'all_pages_complete') {
+            console.log(`[SCRAPER] 🎉 Received all ${request.totalReviews} reviews from ${request.pagesScraped} pages`);
+            
+            // Save to storage instead of downloading
+            const result = await chrome.storage.local.get(['scrapedData']);
+            const existingData = result.scrapedData || { products: {} };
+            
+            // Add this product's data
+            existingData.products[asin] = {
+              metadata: {
+                asin: asin,
+                originalUrl: reviewsUrl,
+                reviewsUrl: reviewsUrl,
+                scrapeDate: new Date().toISOString(),
+                totalReviews: request.allReviews.length,
+                pagesScraped: request.pagesScraped,
+                productName: request.productName
+              },
+              reviews: request.allReviews
+            };
+            
+            // Save back to storage
+            await chrome.storage.local.set({ scrapedData: existingData });
+            console.log('[SCRAPER] Saved to storage:', existingData);
+            
+            showStatus(`Added ${request.totalReviews} reviews from ${request.productName || 'product'}`, 'success');
+            document.getElementById('extractBtn').disabled = false;
+            
+            // Force update stats with a small delay to ensure storage is written
+            setTimeout(() => {
+              updateStats(); // Update the KPIs
+            }, 100);
+            
+            chrome.runtime.onMessage.removeListener(resultListener);
+          } else if (request.action === 'page_update') {
+            showStatus(request.message, 'info');
+          } else if (request.action === 'scraping_failed') {
+            console.error('[SCRAPER] ❌ Scraping failed:', request.message);
+            showStatus(request.message || 'Scraping failed', 'error');
+            document.getElementById('extractBtn').disabled = false;
+            chrome.runtime.onMessage.removeListener(resultListener);
+          }
+        });
+      }
+    });
+  }
 
   function saveToDownloads(data, asin) {
     // Customizable download path - you can change this
