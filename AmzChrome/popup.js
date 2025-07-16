@@ -4,12 +4,13 @@ function showStatus(message, type = 'info') {
   statusDiv.textContent = message;
   statusDiv.className = `status status-${type}`;
   
-  // Auto-clear status after 3 seconds for success messages
+  // Auto-clear status after 5 seconds for success messages (longer for completion messages)
   if (type === 'success') {
+    const clearTime = message.includes('Complete!') ? 7000 : 3000;
     setTimeout(() => {
       statusDiv.textContent = '';
       statusDiv.className = 'status';
-    }, 3000);
+    }, clearTime);
   }
 }
 
@@ -230,7 +231,13 @@ document.addEventListener('DOMContentLoaded', () => {
             await chrome.storage.local.set({ scrapedData: existingData });
             console.log('[SCRAPER] Saved to storage:', existingData);
             
-            showStatus(`Added ${request.totalReviews} reviews from ${request.productName || 'product'}`, 'success');
+            // Show completion message with next steps
+            const productCount = Object.keys(existingData.products).length;
+            if (productCount === 1) {
+              showStatus(`Complete! Added ${request.totalReviews} reviews. Navigate to next product or download.`, 'success');
+            } else {
+              showStatus(`Complete! Added ${request.totalReviews} reviews. Total: ${productCount} products. Navigate to next or download.`, 'success');
+            }
             document.getElementById('extractBtn').disabled = false;
             
             // Force update stats with a small delay to ensure storage is written
@@ -892,14 +899,24 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Send all results back
         console.log(`[MULTI-PAGE] Scraping complete! Total reviews: ${allReviews.length}`);
+        
+        // Send completion message
         chrome.runtime.sendMessage({
-          action: 'all_pages_complete',
-          allReviews: allReviews,
-          productName: productName,
-          totalReviews: allReviews.length,
-          pagesScraped: currentPage,
-          asin: asin
+          action: 'page_update',
+          message: `Finished! Scraped ${allReviews.length} reviews from ${currentPage} pages.`
         });
+        
+        // Small delay before sending final results
+        setTimeout(() => {
+          chrome.runtime.sendMessage({
+            action: 'all_pages_complete',
+            allReviews: allReviews,
+            productName: productName,
+            totalReviews: allReviews.length,
+            pagesScraped: currentPage,
+            asin: asin
+          });
+        }, 500);
         
       } catch (error) {
         console.error('[MULTI-PAGE] Scraping failed:', error);
