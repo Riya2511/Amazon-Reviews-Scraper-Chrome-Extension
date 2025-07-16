@@ -223,7 +223,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     
           await chrome.storage.local.set({ scrapedData: data });
     
-          showStatus(`Product extracted: ${title}`, 'success');
+          showStatus(`Product extracted successfully`, 'success');
           extractProdBtn.disabled = false;
     
           await updateStats();
