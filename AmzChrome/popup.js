@@ -13,15 +13,104 @@ function showStatus(message, type = 'info') {
   }
 }
 
+// Function to update stats from storage
+async function updateStats() {
+  const result = await chrome.storage.local.get(['scrapedData']);
+  const data = result.scrapedData || { products: {} };
+  
+  const productCount = Object.keys(data.products || {}).length;
+  const reviewCount = Object.values(data.products || {}).reduce((total, product) => {
+    return total + (product.reviews ? product.reviews.length : 0);
+  }, 0);
+  
+  document.getElementById('productsCount').textContent = productCount;
+  document.getElementById('reviewsCount').textContent = reviewCount;
+  
+  // Show/hide download button
+  const downloadBtn = document.getElementById('downloadBtn');
+  if (productCount > 0) {
+    downloadBtn.classList.add('visible');
+  } else {
+    downloadBtn.classList.remove('visible');
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     const extractBtn = document.getElementById('extractBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
     const headerLink = document.getElementById('headerLink');
+    const productsCountEl = document.getElementById('productsCount');
+    const reviewsCountEl = document.getElementById('reviewsCount');
+    
+    // Load and display current stats
+    updateStats();
     
     // Header click to open website
     headerLink.addEventListener('click', () => {
       chrome.tabs.create({ url: 'https://www.Ecompulse.ai' });
     });
 
+    // Download button click handler
+    downloadBtn.addEventListener('click', async () => {
+      try {
+        downloadBtn.disabled = true;
+        showStatus('Preparing download...', 'info');
+        
+        // Get all stored data
+        const result = await chrome.storage.local.get(['scrapedData']);
+        const data = result.scrapedData || { products: {} };
+        
+        if (Object.keys(data.products).length === 0) {
+          showStatus('No data to download', 'warning');
+          downloadBtn.disabled = false;
+          return;
+        }
+        
+        // Combine all products' data
+        const combinedData = {
+          metadata: {
+            totalProducts: Object.keys(data.products).length,
+            totalReviews: 0,
+            exportDate: new Date().toISOString(),
+            products: []
+          },
+          reviews: []
+        };
+        
+        // Merge all reviews
+        Object.values(data.products).forEach(product => {
+          combinedData.metadata.products.push({
+            asin: product.metadata.asin,
+            productName: product.metadata.productName,
+            reviewCount: product.reviews.length
+          });
+          combinedData.metadata.totalReviews += product.reviews.length;
+          combinedData.reviews = combinedData.reviews.concat(product.reviews);
+        });
+        
+        // Generate filename with timestamp
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const filename = `amazon-reviews-multi-product-${timestamp}.csv`;
+        
+        // Save to downloads
+        saveToDownloads(combinedData, 'multi-product');
+        
+        // Clear storage after successful download
+        await chrome.storage.local.remove(['scrapedData']);
+        
+        showStatus(`Downloaded ${combinedData.metadata.totalReviews} reviews from ${combinedData.metadata.totalProducts} products`, 'success');
+        
+        // Reset UI
+        updateStats();
+        downloadBtn.disabled = false;
+        
+      } catch (error) {
+        console.error('Download error:', error);
+        showStatus('Download failed', 'error');
+        downloadBtn.disabled = false;
+      }
+    });
+    
     extractBtn.addEventListener('click', async () => {
       try {
         extractBtn.disabled = true;
@@ -81,11 +170,16 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('[SCRAPER] ✅ Multi-page scraping script injected successfully');
             
             // Listen for results
-            chrome.runtime.onMessage.addListener(function resultListener(request) {
+            chrome.runtime.onMessage.addListener(async function resultListener(request) {
               if (request.action === 'all_pages_complete') {
                 console.log(`[SCRAPER] 🎉 Received all ${request.totalReviews} reviews from ${request.pagesScraped} pages`);
                 
-                const scrapedData = {
+                // Save to storage instead of downloading
+                const result = await chrome.storage.local.get(['scrapedData']);
+                const existingData = result.scrapedData || { products: {} };
+                
+                // Add this product's data
+                existingData.products[asin] = {
                   metadata: {
                     asin: asin,
                     originalUrl: reviewsUrl,
@@ -98,9 +192,12 @@ document.addEventListener('DOMContentLoaded', () => {
                   reviews: request.allReviews
                 };
                 
-                showStatus(`${request.totalReviews} reviews from ${request.pagesScraped} pages saved to Downloads!`, 'success');
-                saveToDownloads(scrapedData, asin);
+                // Save back to storage
+                await chrome.storage.local.set({ scrapedData: existingData });
+                
+                showStatus(`Added ${request.totalReviews} reviews from ${request.productName || 'product'}`, 'success');
                 extractBtn.disabled = false;
+                updateStats(); // Update the KPIs
                 chrome.runtime.onMessage.removeListener(resultListener);
               } else if (request.action === 'page_update') {
                 showStatus(request.message, 'info');

@@ -11,7 +11,7 @@
     
     body {
       width: 340px;
-      height: 280px;
+      height: 420px;
       background: transparent !important;
       color: #ffffff;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -104,6 +104,41 @@
       margin-left: 8px;
     }
 
+    .kpi-section {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .kpi-card {
+      flex: 1;
+      background-color: #3a3a3a;
+      border: 1px solid #4a4a4a;
+      border-radius: 8px;
+      padding: 12px;
+      text-align: center;
+    }
+
+    .kpi-label {
+      font-size: 11px;
+      color: #b0b0b0;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .kpi-value {
+      font-size: 20px;
+      font-weight: 700;
+      color: #08edb8;
+    }
+
+    .button-group {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
     .main-button {
       background: linear-gradient(135deg, #08edb8 0%, #06c49a 100%);
       color: white;
@@ -114,8 +149,38 @@
       font-weight: 600;
       cursor: pointer;
       transition: all 0.2s ease;
-      margin-bottom: 16px;
       box-shadow: 0 2px 8px rgba(8, 237, 184, 0.25);
+      flex: 1;
+    }
+
+    .download-button {
+      background-color: #3a3a3a;
+      color: #ffffff;
+      border: 1px solid #4a4a4a;
+      border-radius: 8px;
+      padding: 12px 20px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .download-button:hover {
+      background-color: #404040;
+      border-color: #5a5a5a;
+    }
+
+    .download-button.visible {
+      display: flex;
+    }
+
+    .download-icon {
+      width: 16px;
+      height: 16px;
     }
 
     .main-button:hover {
@@ -132,6 +197,33 @@
       opacity: 0.6;
       cursor: not-allowed;
       transform: none;
+    }
+
+    .instructions {
+      background-color: #363636;
+      border: 1px solid #404040;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 12px;
+      font-size: 11px;
+      line-height: 1.5;
+      color: #d0d0d0;
+    }
+
+    .instructions-title {
+      font-weight: 600;
+      color: #ffffff;
+      margin-bottom: 6px;
+      font-size: 12px;
+    }
+
+    .instructions ol {
+      margin: 0;
+      padding-left: 20px;
+    }
+
+    .instructions li {
+      margin-bottom: 4px;
     }
 
     .status {
@@ -208,12 +300,41 @@
       </svg>
     </div>
 
-    <button class="main-button" id="extractBtn">Extract Product Reviews</button>
+    <div class="kpi-section">
+      <div class="kpi-card">
+        <div class="kpi-label">Products</div>
+        <div class="kpi-value" id="productsCount">0</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Reviews</div>
+        <div class="kpi-value" id="reviewsCount">0</div>
+      </div>
+    </div>
+
+    <div class="button-group">
+      <button class="main-button" id="extractBtn">Extract Product Reviews</button>
+      <button class="download-button" id="downloadBtn">
+        <svg class="download-icon" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
+        </svg>
+        Download
+      </button>
+    </div>
+
+    <div class="instructions">
+      <div class="instructions-title">How to use:</div>
+      <ol>
+        <li>Navigate to product reviews page (not product page)</li>
+        <li>Click Extract to collect reviews</li>
+        <li>Repeat for multiple products</li>
+        <li>Click Download when ready</li>
+      </ol>
+    </div>
     
     <div class="status" id="status"></div>
 
     <div class="footer-note">
-      *You must be logged into an Amazon account before scraping. Use at your own risk.
+      *Must be logged into Amazon. Navigate to reviews page, not product page.
     </div>
   </div>
 
