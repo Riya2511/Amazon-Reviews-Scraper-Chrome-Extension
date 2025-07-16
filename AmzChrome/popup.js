@@ -66,8 +66,53 @@ document.addEventListener('DOMContentLoaded', () => {
         
         showStatus('Starting multi-page scraping...', 'info');
         
-        // Start the multi-page scraping process
-        startMultiPageScraping(tab, asin, reviewsUrl);
+        // Use comprehensive multi-page scraping
+        console.log('[SCRAPER] Using comprehensive multi-page scraping approach...');
+        chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: performMultiPageScraping,
+          args: [asin, 2] // maxPages = 2
+        }, (results) => {
+          if (chrome.runtime.lastError) {
+            console.error('[SCRAPER] ❌ Script injection error:', chrome.runtime.lastError);
+            showStatus('Failed to inject scraping script', 'error');
+            extractBtn.disabled = false;
+          } else {
+            console.log('[SCRAPER] ✅ Multi-page scraping script injected successfully');
+            
+            // Listen for results
+            chrome.runtime.onMessage.addListener(function resultListener(request) {
+              if (request.action === 'all_pages_complete') {
+                console.log(`[SCRAPER] 🎉 Received all ${request.totalReviews} reviews from ${request.pagesScraped} pages`);
+                
+                const scrapedData = {
+                  metadata: {
+                    asin: asin,
+                    originalUrl: reviewsUrl,
+                    reviewsUrl: reviewsUrl,
+                    scrapeDate: new Date().toISOString(),
+                    totalReviews: request.allReviews.length,
+                    pagesScraped: request.pagesScraped,
+                    productName: request.productName
+                  },
+                  reviews: request.allReviews
+                };
+                
+                showStatus(`${request.totalReviews} reviews from ${request.pagesScraped} pages saved to Downloads!`, 'success');
+                saveToDownloads(scrapedData, asin);
+                extractBtn.disabled = false;
+                chrome.runtime.onMessage.removeListener(resultListener);
+              } else if (request.action === 'page_update') {
+                showStatus(request.message, 'info');
+              } else if (request.action === 'scraping_failed') {
+                console.error('[SCRAPER] ❌ Scraping failed:', request.message);
+                showStatus(request.message || 'Scraping failed', 'error');
+                extractBtn.disabled = false;
+                chrome.runtime.onMessage.removeListener(resultListener);
+              }
+            });
+          }
+        });
         
       } catch (error) {
         console.error('Error:', error);
@@ -481,4 +526,189 @@ document.addEventListener('DOMContentLoaded', () => {
         message: error.message
       });
     }
+  }
+  
+  // Comprehensive multi-page scraping function that runs entirely in content script
+  function performMultiPageScraping(asin, maxPages) {
+    console.log(`[MULTI-PAGE] Starting comprehensive multi-page scraping for ASIN: ${asin}`);
+    
+    let allReviews = [];
+    let productName = '';
+    let currentPage = 1;
+    let reviewIdsSeen = new Set();
+    
+    // Helper function to wait for condition
+    function waitForCondition(condition, timeout = 10000) {
+      return new Promise((resolve, reject) => {
+        const startTime = Date.now();
+        const checkInterval = setInterval(() => {
+          if (condition()) {
+            clearInterval(checkInterval);
+            resolve();
+          } else if (Date.now() - startTime > timeout) {
+            clearInterval(checkInterval);
+            reject(new Error('Timeout waiting for condition'));
+          }
+        }, 100);
+      });
+    }
+    
+    // Helper function to scrape current page
+    function scrapeCurrentPage() {
+      console.log(`[MULTI-PAGE] Scraping page ${currentPage}...`);
+      
+      // Get product name on first page
+      if (currentPage === 1) {
+        const productNameElement = document.querySelector('#cm_cr_dp_d_product_info h1 a') || 
+                                   document.querySelector('#cm_cr_dp_d_product_info h1') ||
+                                   document.querySelector('[data-hook="product-link"]');
+        productName = productNameElement?.textContent?.trim() || 'Product Name Not Found';
+      }
+      
+      // Get all reviews
+      const reviewElements = document.querySelectorAll('[data-hook="review"]');
+      console.log(`[MULTI-PAGE] Found ${reviewElements.length} reviews on page ${currentPage}`);
+      
+      const pageReviews = [];
+      reviewElements.forEach((reviewElement, index) => {
+        try {
+          const reviewId = reviewElement.getAttribute('id') || `review-${currentPage}-${index}`;
+          
+          // Skip if we've seen this review before
+          if (reviewIdsSeen.has(reviewId)) {
+            console.log(`[MULTI-PAGE] Skipping duplicate review: ${reviewId}`);
+            return;
+          }
+          
+          reviewIdsSeen.add(reviewId);
+          
+          const titleElement = reviewElement.querySelector('[data-hook="review-title"] span:not([class])') || 
+                              reviewElement.querySelector('[data-hook="review-title"]');
+          const textElement = reviewElement.querySelector('[data-hook="review-body"] span') ||
+                             reviewElement.querySelector('[data-hook="review-body"]');
+          const authorElement = reviewElement.querySelector('.a-profile-name');
+          const ratingElement = reviewElement.querySelector('[data-hook="review-star-rating"] span');
+          const dateElement = reviewElement.querySelector('[data-hook="review-date"]');
+          
+          const review = {
+            id: reviewId,
+            index: allReviews.length + pageReviews.length + 1,
+            page: currentPage,
+            title: titleElement?.textContent?.trim() || 'N/A',
+            text: textElement?.textContent?.trim() || 'N/A',
+            author: authorElement?.textContent?.trim() || 'N/A',
+            rating: ratingElement?.textContent?.trim() || 'N/A',
+            date: dateElement?.textContent?.trim() || 'N/A'
+          };
+          
+          console.log(`[MULTI-PAGE] Review ${index + 1}: "${review.title.substring(0, 30)}..." by ${review.author}`);
+          pageReviews.push(review);
+        } catch (error) {
+          console.error(`[MULTI-PAGE] Error parsing review ${index}:`, error);
+        }
+      });
+      
+      return pageReviews;
+    }
+    
+    // Helper function to navigate to next page
+    async function navigateToNextPageAsync() {
+      console.log(`[MULTI-PAGE] Navigating to page ${currentPage + 1}...`);
+      
+      // Store current review count to detect when new content loads
+      const currentReviewCount = document.querySelectorAll('[data-hook="review"]').length;
+      
+      // Click next button
+      const nextButton = document.querySelector('li.a-last:not(.a-disabled) a');
+      if (!nextButton) {
+        console.log('[MULTI-PAGE] No next button found');
+        return false;
+      }
+      
+      nextButton.click();
+      chrome.runtime.sendMessage({
+        action: 'page_update',
+        message: `Navigating to page ${currentPage + 1}...`
+      });
+      
+      // Wait for new content to load
+      try {
+        await waitForCondition(() => {
+          const newReviewCount = document.querySelectorAll('[data-hook="review"]').length;
+          const pageIndicator = document.querySelector('.a-pagination .a-selected');
+          const currentPageNum = pageIndicator ? parseInt(pageIndicator.textContent) : 0;
+          
+          // Check if page number changed or content changed
+          return currentPageNum === currentPage + 1 || newReviewCount !== currentReviewCount;
+        }, 10000);
+        
+        // Additional wait for content to stabilize
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        currentPage++;
+        return true;
+      } catch (error) {
+        console.error('[MULTI-PAGE] Failed to load next page:', error);
+        return false;
+      }
+    }
+    
+    // Main scraping loop
+    async function performScraping() {
+      try {
+        // Scrape page 1
+        chrome.runtime.sendMessage({
+          action: 'page_update',
+          message: 'Scraping page 1...'
+        });
+        
+        const page1Reviews = scrapeCurrentPage();
+        allReviews = allReviews.concat(page1Reviews);
+        console.log(`[MULTI-PAGE] Page 1 complete: ${page1Reviews.length} reviews`);
+        
+        // Continue to next pages
+        while (currentPage < maxPages) {
+          const navigated = await navigateToNextPageAsync();
+          if (!navigated) {
+            console.log('[MULTI-PAGE] Cannot navigate further, stopping');
+            break;
+          }
+          
+          chrome.runtime.sendMessage({
+            action: 'page_update',
+            message: `Scraping page ${currentPage}...`
+          });
+          
+          const pageReviews = scrapeCurrentPage();
+          if (pageReviews.length === 0) {
+            console.log('[MULTI-PAGE] No reviews found on page, stopping');
+            break;
+          }
+          
+          allReviews = allReviews.concat(pageReviews);
+          console.log(`[MULTI-PAGE] Page ${currentPage} complete: ${pageReviews.length} reviews, total: ${allReviews.length}`);
+        }
+        
+        // Send all results back
+        console.log(`[MULTI-PAGE] Scraping complete! Total reviews: ${allReviews.length}`);
+        chrome.runtime.sendMessage({
+          action: 'all_pages_complete',
+          allReviews: allReviews,
+          productName: productName,
+          totalReviews: allReviews.length,
+          pagesScraped: currentPage,
+          asin: asin
+        });
+        
+      } catch (error) {
+        console.error('[MULTI-PAGE] Scraping failed:', error);
+        chrome.runtime.sendMessage({
+          action: 'scraping_failed',
+          message: error.message
+        });
+      }
+    }
+    
+    // Start scraping
+    performScraping();
   }
