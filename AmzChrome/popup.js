@@ -587,8 +587,15 @@ document.addEventListener('DOMContentLoaded', () => {
           const textElement = reviewElement.querySelector('[data-hook="review-body"] span') ||
                              reviewElement.querySelector('[data-hook="review-body"]');
           const authorElement = reviewElement.querySelector('.a-profile-name');
-          const ratingElement = reviewElement.querySelector('[data-hook="review-star-rating"] span');
+          const authorLinkElement = reviewElement.querySelector('a.a-profile') || 
+                                   reviewElement.querySelector('div.a-profile-content')?.closest('a');
+          const ratingElement = reviewElement.querySelector('[data-hook="review-star-rating"] span') ||
+                               reviewElement.querySelector('[data-hook="review-star-rating"]');
           const dateElement = reviewElement.querySelector('[data-hook="review-date"]');
+          const verifiedElement = reviewElement.querySelector('[data-hook="avp-badge"]');
+          const variationElement = reviewElement.querySelector('[data-hook="format-strip"]') ||
+                                  reviewElement.querySelector('.review-format-strip');
+          const helpfulElement = reviewElement.querySelector('[data-hook="helpful-vote-statement"]');
           
           const review = {
             id: reviewId,
@@ -597,8 +604,12 @@ document.addEventListener('DOMContentLoaded', () => {
             title: titleElement?.textContent?.trim() || 'N/A',
             text: textElement?.textContent?.trim() || 'N/A',
             author: authorElement?.textContent?.trim() || 'N/A',
+            authorProfileLink: authorLinkElement?.href || 'N/A',
             rating: ratingElement?.textContent?.trim() || 'N/A',
-            date: dateElement?.textContent?.trim() || 'N/A'
+            date: dateElement?.textContent?.trim() || 'N/A',
+            verified: verifiedElement ? 'Verified Purchase' : 'Not Verified',
+            productVariation: variationElement?.textContent?.trim() || 'N/A',
+            helpful: helpfulElement?.textContent?.trim() || 'N/A'
           };
           
           console.log(`[MULTI-PAGE] Review ${index + 1}: "${review.title.substring(0, 30)}..." by ${review.author}`);
