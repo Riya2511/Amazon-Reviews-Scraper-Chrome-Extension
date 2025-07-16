@@ -1,3 +1,13 @@
+// Debug function to check storage state
+async function debugStorage() {
+  const result = await chrome.storage.local.get(['scrapedData']);
+  console.log('[DEBUG] Current storage state:', result);
+  return result.scrapedData;
+}
+
+// Log storage state on popup open
+debugStorage();
+
 // Function to show status messages (moved outside for global access)
 function showStatus(message, type = 'info') {
   const statusDiv = document.getElementById('status');
@@ -29,36 +39,42 @@ async function updateStats() {
     
     console.log(`[STATS] Products: ${productCount}, Reviews: ${reviewCount}`);
     
-    document.getElementById('productsCount').textContent = productCount;
-    document.getElementById('reviewsCount').textContent = reviewCount;
+    // Update UI elements if they exist
+    const productsCountEl = document.getElementById('productsCount');
+    const reviewsCountEl = document.getElementById('reviewsCount');
+    if (productsCountEl) productsCountEl.textContent = productCount;
+    if (reviewsCountEl) reviewsCountEl.textContent = reviewCount;
     
-    // Show/hide download button
-    const downloadBtn = document.getElementById('downloadBtn');
-    if (downloadBtn) {
-      if (productCount > 0) {
-        console.log(`[STATS] Showing download button, ${productCount} products found`);
-        downloadBtn.classList.add('visible');
-      } else {
-        console.log('[STATS] Hiding download button, no products found');
-        downloadBtn.classList.remove('visible');
-      }
-    } else {
-      console.error('[STATS] Download button element not found!');
-    }
+    // Download button is always visible now
+    console.log(`[STATS] Current data: ${productCount} products with ${reviewCount} reviews`);
   } catch (error) {
     console.error('[STATS] Error updating stats:', error);
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log('[POPUP] DOMContentLoaded - Initializing popup...');
+    
     const extractBtn = document.getElementById('extractBtn');
     const downloadBtn = document.getElementById('downloadBtn');
     const headerLink = document.getElementById('headerLink');
     const productsCountEl = document.getElementById('productsCount');
     const reviewsCountEl = document.getElementById('reviewsCount');
     
-    // Load and display current stats
-    updateStats();
+    // Load and display current stats immediately
+    await updateStats();
+    
+    // Also update stats after a short delay to ensure UI is ready
+    setTimeout(() => updateStats(), 100);
+    setTimeout(() => updateStats(), 500);
+    
+    // Listen for storage changes to update UI in real-time
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName === 'local' && changes.scrapedData) {
+        console.log('[POPUP] Storage changed, updating stats...');
+        updateStats();
+      }
+    });
     
     // Add click handler to KPI cards to refresh stats
     document.querySelector('.kpi-section').addEventListener('click', () => {
@@ -73,6 +89,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Download button click handler
     downloadBtn.addEventListener('click', async () => {
+      // Prevent multiple clicks
+      if (downloadBtn.disabled) return;
+      
       try {
         downloadBtn.disabled = true;
         showStatus('Preparing download...', 'info');
@@ -98,7 +117,7 @@ document.addEventListener('DOMContentLoaded', () => {
           reviews: []
         };
         
-        // Merge all reviews
+        // Merge all reviews with product metadata
         Object.values(data.products).forEach(product => {
           combinedData.metadata.products.push({
             asin: product.metadata.asin,
@@ -106,12 +125,21 @@ document.addEventListener('DOMContentLoaded', () => {
             reviewCount: product.reviews.length
           });
           combinedData.metadata.totalReviews += product.reviews.length;
-          combinedData.reviews = combinedData.reviews.concat(product.reviews);
+          
+          // Add product metadata to each review
+          const enrichedReviews = product.reviews.map(review => ({
+            ...review,
+            productAsin: product.metadata.asin,
+            productName: product.metadata.productName,
+            productUrl: product.metadata.originalUrl
+          }));
+          
+          combinedData.reviews = combinedData.reviews.concat(enrichedReviews);
         });
         
         // Generate filename with timestamp
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const filename = `amazon-reviews-multi-product-${timestamp}.csv`;
+        const filename = `Ecompulse_amz_reviews_${timestamp}.csv`;
         
         // Save to downloads
         saveToDownloads(combinedData, 'multi-product');
@@ -122,8 +150,10 @@ document.addEventListener('DOMContentLoaded', () => {
         showStatus(`Downloaded ${combinedData.metadata.totalReviews} reviews from ${combinedData.metadata.totalProducts} products`, 'success');
         
         // Reset UI
-        updateStats();
+        await updateStats();
         downloadBtn.disabled = false;
+        
+        // Button stays visible after download
         
       } catch (error) {
         console.error('Download error:', error);
@@ -250,17 +280,20 @@ document.addEventListener('DOMContentLoaded', () => {
               
               // Show completion message with next steps
               const productCount = Object.keys(existingData.products).length;
+              const totalReviews = Object.values(existingData.products).reduce((sum, p) => sum + p.reviews.length, 0);
+              
               if (productCount === 1) {
                 showStatus(`Complete! Added ${request.totalReviews} reviews. Navigate to next product or download.`, 'success');
               } else {
-                showStatus(`Complete! Added ${request.totalReviews} reviews. Total: ${productCount} products. Navigate to next or download.`, 'success');
+                showStatus(`Complete! ${totalReviews} total reviews from ${productCount} products. Navigate to next or download.`, 'success');
               }
               document.getElementById('extractBtn').disabled = false;
               
               // Force update stats multiple times to ensure UI updates
-              updateStats();
-              setTimeout(() => updateStats(), 500);
-              setTimeout(() => updateStats(), 1000);
+              await updateStats();
+              setTimeout(async () => await updateStats(), 250);
+              setTimeout(async () => await updateStats(), 750);
+              setTimeout(async () => await updateStats(), 1500);
               
             } catch (error) {
               console.error('[SCRAPER] ❌ Error saving to storage:', error);
@@ -288,7 +321,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Create filename with timestamp
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `${downloadPath}amazon-reviews-${asin}-${timestamp}.csv`;
+    const filename = `${downloadPath}Ecompulse_amz_reviews_${timestamp}.csv`;
     
     // Convert data to CSV string
     const csvString = convertToCSV(data);
@@ -347,9 +380,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     data.reviews.forEach(review => {
       const row = [
-        escapeCSV(data.metadata.originalUrl),
-        escapeCSV(data.metadata.asin),
-        escapeCSV(data.metadata.productName || 'N/A'),
+        escapeCSV(review.productUrl || 'N/A'),
+        escapeCSV(review.productAsin || 'N/A'),
+        escapeCSV(review.productName || 'N/A'),
         escapeCSV(review.page || 1),
         escapeCSV(review.author),
         escapeCSV(review.authorProfileLink),
