@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>EcomPulse Amazon Toolkit</title>
+  <style>
+    html {
+      background: transparent !important;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      width: 340px;
+      height: 280px;
+      background: transparent !important;
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      position: relative;
+    }
+
+    .container {
+      background-color: #2a2a2a;
+      border-radius: 0;
+      padding: 20px;
+      height: 100%;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      box-shadow: none;
+      border: none;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .main-logo {
+      text-align: center;
+      margin-bottom: 16px;
+    }
+
+    .main-logo img {
+      height: 32px;
+      object-fit: contain;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 24px;
+      cursor: pointer;
+      padding: 12px;
+      border-radius: 8px;
+      background-color: #3a3a3a;
+      border: 1px solid #4a4a4a;
+      transition: all 0.2s ease;
+    }
+
+    .header:hover {
+      background-color: #404040;
+      border-color: #5a5a5a;
+    }
+
+    .header-icon {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-right: 12px;
+      overflow: hidden;
+    }
+
+    .header-icon img {
+      width: 32px;
+      height: 32px;
+      object-fit: contain;
+    }
+
+    .header-text {
+      flex: 1;
+    }
+
+    .header-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #ffffff;
+      margin: 0;
+      line-height: 1.3;
+    }
+
+    .header-subtitle {
+      font-size: 12px;
+      color: #b0b0b0;
+      margin: 0;
+      margin-top: 2px;
+    }
+
+    .external-link-icon {
+      width: 16px;
+      height: 16px;
+      opacity: 0.6;
+      margin-left: 8px;
+    }
+
+    .main-button {
+      background: linear-gradient(135deg, #08edb8 0%, #06c49a 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 12px 24px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 8px rgba(8, 237, 184, 0.25);
+    }
+
+    .main-button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(8, 237, 184, 0.35);
+      background: linear-gradient(135deg, #06c49a 0%, #059669 100%);
+    }
+
+    .main-button:active {
+      transform: translateY(0);
+    }
+
+    .main-button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .status {
+      font-size: 12px;
+      text-align: center;
+      min-height: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px 12px;
+      border-radius: 6px;
+      transition: all 0.3s ease;
+      background-color: transparent;
+    }
+
+    .status-success {
+      background-color: rgba(74, 222, 128, 0.15);
+      color: #4ade80;
+      border: 1px solid rgba(74, 222, 128, 0.3);
+    }
+
+    .status-error {
+      background-color: rgba(239, 68, 68, 0.15);
+      color: #ef4444;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .status-warning {
+      background-color: rgba(245, 158, 11, 0.15);
+      color: #f59e0b;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    .status-info {
+      background-color: rgba(59, 130, 246, 0.15);
+      color: #3b82f6;
+      border: 1px solid rgba(59, 130, 246, 0.3);
+    }
+
+    .footer-note {
+      margin-top: auto;
+      font-size: 11px;
+      color: #888;
+      text-align: center;
+      line-height: 1.4;
+    }
+
+    .footer-note .extension-icon {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      margin: 0 2px;
+      vertical-align: middle;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="main-logo">
+      <img src="Ecompulse Logo Dark Background.png" alt="EcomPulse">
+    </div>
+    
+    <div class="header" id="headerLink">
+      <div class="header-icon">
+        <img src="logo.png" alt="EcomPulse">
+      </div>
+      <div class="header-text">
+        <div class="header-title">EcomPulse Technology</div>
+        <div class="header-subtitle">Amazon Review Scraper</div>
+      </div>
+      <svg class="external-link-icon" fill="currentColor" viewBox="0 0 20 20">
+        <path fill-rule="evenodd" d="M4.25 5.5a.75.75 0 00-.75.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 00.75-.75v-4a.75.75 0 011.5 0v4A2.25 2.25 0 0112.75 17h-8.5A2.25 2.25 0 012 14.75v-8.5A2.25 2.25 0 014.25 4h5a.75.75 0 010 1.5h-5z" clip-rule="evenodd" />
+        <path fill-rule="evenodd" d="M6.194 12.753a.75.75 0 001.06.053L16.5 4.44v2.81a.75.75 0 001.5 0v-4.5a.75.75 0 00-.75-.75h-4.5a.75.75 0 000 1.5h2.553l-9.056 8.194a.75.75 0 00-.053 1.06z" clip-rule="evenodd" />
+      </svg>
+    </div>
+
+    <button class="main-button" id="extractBtn">Extract Product Reviews</button>
+    
+    <div class="status" id="status"></div>
+
+    <div class="footer-note">
+      *You must be logged into an Amazon account before scraping. Use at your own risk.
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
