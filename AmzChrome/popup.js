@@ -166,6 +166,8 @@ document.addEventListener('DOMContentLoaded', () => {
       'review_star_rating',
       'review_date',
       'review_product_variation',
+      'review_images',
+      'is_vine_review',
       'actual_review'
     ];
     
@@ -195,6 +197,8 @@ document.addEventListener('DOMContentLoaded', () => {
         escapeCSV(review.rating),
         escapeCSV(review.date),
         escapeCSV(review.productVariation || 'N/A'),
+        escapeCSV(review.images || ''),
+        escapeCSV(review.isVineReview || false),
         escapeCSV(review.text)
       ];
       rows.push(row.join(','));
@@ -427,6 +431,18 @@ document.addEventListener('DOMContentLoaded', () => {
           const variationElement = reviewElement.querySelector('[data-hook="format-strip"]') ||
                                   reviewElement.querySelector('[data-hook="review-format-strip"]');
           
+          // Extract review images
+          const imageElements = reviewElement.querySelectorAll('img[data-hook="review-image-tile"]');
+          let images = '';
+          if (imageElements.length > 0) {
+            const imageUrls = Array.from(imageElements).map(img => img.src);
+            images = imageElements.length === 1 ? imageUrls[0] : JSON.stringify(imageUrls);
+          }
+          
+          // Check if it's a Vine review
+          const vineElement = reviewElement.querySelector('span.a-color-success.a-text-bold');
+          const isVineReview = vineElement && vineElement.textContent.includes('Amazon Vine') ? true : false;
+          
           const reviewData = {
             id: reviewId,
             index: (actualPageNumber - 1) * 10 + index + 1,
@@ -439,7 +455,9 @@ document.addEventListener('DOMContentLoaded', () => {
             text: textElement?.textContent?.trim() || 'N/A',
             helpful: helpfulElement?.textContent?.trim() || 'N/A',
             verified: verifiedElement ? 'Verified Purchase' : 'Not Verified',
-            productVariation: variationElement?.textContent?.trim() || 'N/A'
+            productVariation: variationElement?.textContent?.trim() || 'N/A',
+            images: images,
+            isVineReview: isVineReview
           };
           
           console.log(`[CONTENT] Review ${index + 1}: "${reviewData.title.substring(0, 40)}..." by ${reviewData.author}`);
@@ -597,6 +615,18 @@ document.addEventListener('DOMContentLoaded', () => {
                                   reviewElement.querySelector('.review-format-strip');
           const helpfulElement = reviewElement.querySelector('[data-hook="helpful-vote-statement"]');
           
+          // Extract review images
+          const imageElements = reviewElement.querySelectorAll('img[data-hook="review-image-tile"]');
+          let images = '';
+          if (imageElements.length > 0) {
+            const imageUrls = Array.from(imageElements).map(img => img.src);
+            images = imageElements.length === 1 ? imageUrls[0] : JSON.stringify(imageUrls);
+          }
+          
+          // Check if it's a Vine review
+          const vineElement = reviewElement.querySelector('span.a-color-success.a-text-bold');
+          const isVineReview = vineElement && vineElement.textContent.includes('Amazon Vine') ? true : false;
+          
           const review = {
             id: reviewId,
             index: allReviews.length + pageReviews.length + 1,
@@ -609,7 +639,9 @@ document.addEventListener('DOMContentLoaded', () => {
             date: dateElement?.textContent?.trim() || 'N/A',
             verified: verifiedElement ? 'Verified Purchase' : 'Not Verified',
             productVariation: variationElement?.textContent?.trim() || 'N/A',
-            helpful: helpfulElement?.textContent?.trim() || 'N/A'
+            helpful: helpfulElement?.textContent?.trim() || 'N/A',
+            images: images,
+            isVineReview: isVineReview
           };
           
           console.log(`[MULTI-PAGE] Review ${index + 1}: "${review.title.substring(0, 30)}..." by ${review.author}`);
