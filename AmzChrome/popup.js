@@ -71,7 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
         chrome.scripting.executeScript({
           target: { tabId: tab.id },
           func: performMultiPageScraping,
-          args: [asin, 2] // maxPages = 2
+          args: [asin, -1] // maxPages = -1 means scrape all available pages
         }, (results) => {
           if (chrome.runtime.lastError) {
             console.error('[SCRAPER] ❌ Script injection error:', chrome.runtime.lastError);
@@ -658,8 +658,9 @@ document.addEventListener('DOMContentLoaded', () => {
     async function navigateToNextPageAsync() {
       console.log(`[MULTI-PAGE] Navigating to page ${currentPage + 1}...`);
       
-      // Store current review count to detect when new content loads
-      const currentReviewCount = document.querySelectorAll('[data-hook="review"]').length;
+      // Store current first review ID to detect when new content loads
+      const firstReviewBefore = document.querySelector('[data-hook="review"]');
+      const previousFirstReviewId = firstReviewBefore ? firstReviewBefore.getAttribute('id') : null;
       
       // Click next button
       const nextButton = document.querySelector('li.a-last:not(.a-disabled) a');
@@ -676,13 +677,30 @@ document.addEventListener('DOMContentLoaded', () => {
       
       // Wait for new content to load
       try {
+        // First, wait for any loading indicators to appear and disappear
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
         await waitForCondition(() => {
-          const newReviewCount = document.querySelectorAll('[data-hook="review"]').length;
           const pageIndicator = document.querySelector('.a-pagination .a-selected');
           const currentPageNum = pageIndicator ? parseInt(pageIndicator.textContent) : 0;
           
-          // Check if page number changed or content changed
-          return currentPageNum === currentPage + 1 || newReviewCount !== currentReviewCount;
+          // Check if we're on the next page
+          if (currentPageNum === currentPage + 1) {
+            console.log(`[MULTI-PAGE] Page indicator shows we're on page ${currentPageNum}`);
+            return true;
+          }
+          
+          // Alternative: Check if the first review ID changed
+          const firstReview = document.querySelector('[data-hook="review"]');
+          if (firstReview) {
+            const firstReviewId = firstReview.getAttribute('id');
+            if (firstReviewId && firstReviewId !== previousFirstReviewId) {
+              console.log('[MULTI-PAGE] First review ID changed, new content loaded');
+              return true;
+            }
+          }
+          
+          return false;
         }, 10000);
         
         // Additional wait for content to stabilize
@@ -709,13 +727,16 @@ document.addEventListener('DOMContentLoaded', () => {
         allReviews = allReviews.concat(page1Reviews);
         console.log(`[MULTI-PAGE] Page 1 complete: ${page1Reviews.length} reviews`);
         
-        // Continue to next pages
-        while (currentPage < maxPages) {
+        // Continue to next pages until no more pages or reached limit
+        while (maxPages === -1 || currentPage < maxPages) {
           const navigated = await navigateToNextPageAsync();
           if (!navigated) {
             console.log('[MULTI-PAGE] Cannot navigate further, stopping');
             break;
           }
+          
+          // Wait a bit more for content to fully render
+          await new Promise(resolve => setTimeout(resolve, 1000));
           
           chrome.runtime.sendMessage({
             action: 'page_update',
@@ -730,6 +751,13 @@ document.addEventListener('DOMContentLoaded', () => {
           
           allReviews = allReviews.concat(pageReviews);
           console.log(`[MULTI-PAGE] Page ${currentPage} complete: ${pageReviews.length} reviews, total: ${allReviews.length}`);
+          
+          // Check if there's a next page button
+          const nextButtonCheck = document.querySelector('li.a-last:not(.a-disabled) a');
+          if (!nextButtonCheck) {
+            console.log('[MULTI-PAGE] No more pages available');
+            break;
+          }
         }
         
         // Send all results back
