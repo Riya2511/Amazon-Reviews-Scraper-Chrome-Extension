@@ -591,6 +591,77 @@ function extractCompleteProductData(asin, url) {
     return variations;
   }
 
+  function extractDirections() {
+      const directions = [];
+      // Look for the parent element with id "important-information"
+      const prodDetailsSection = document.querySelector('#important-information');
+      if (!prodDetailsSection) return directions;
+      
+      // Look for div with class "a-section content" that contains "Directions"
+      const contentSections = prodDetailsSection.querySelectorAll('div.a-section.content');
+      
+      for (const section of contentSections) {
+          // Look for "Directions" in multiple possible elements
+          const possibleHeaders = section.querySelectorAll('span.a-text-bold, h1, h2, h3, h4, h5, h6, strong, b');
+          
+          let foundDirections = false;
+          for (const header of possibleHeaders) {
+              if (header && header.textContent.trim().toLowerCase() === 'directions') {
+                  foundDirections = true;
+                  break;
+              }
+          }
+          
+          if (foundDirections) {
+              // Found the Directions section, extract all paragraphs
+              const paragraphs = section.querySelectorAll('p');
+              paragraphs.forEach(p => {
+                  const text = p.textContent.trim();
+                  if (text && text.length > 0) {
+                      directions.push(text);
+                  }
+              });
+              break; // Found the directions section, no need to continue
+          }
+      }
+      
+      // If no directions found, return empty array
+      return directions;
+  }
+  
+  function extractAdditionalDetails() {
+    const additionalDetails = {};
+    
+    // Look for the parent element with id "prodDetails"
+    const prodDetailsSection = document.querySelector('#prodDetails');
+    if (!prodDetailsSection) return additionalDetails;
+    
+    // Find all expander containers within prodDetails
+    const expanderContainers = prodDetailsSection.querySelectorAll('div.a-expander-container');
+    
+    for (const container of expanderContainers) {
+      // Look for the expander header span that contains "Additional details"
+      const headerSpan = container.querySelector('span.a-expander-prompt');
+      if (headerSpan && headerSpan.textContent.trim().toLowerCase().includes('additional details')) {
+        // Found the Additional details section, extract table data
+        const table = container.querySelector('table.prodDetTable');
+        if (table) {
+          const rows = table.querySelectorAll('tr');
+          rows.forEach(row => {
+            const key = row.querySelector('th')?.textContent?.trim();
+            const value = row.querySelector('td')?.textContent?.trim();
+            if (key && value) {
+              additionalDetails[key] = value;
+            }
+          });
+        }
+        break; // Found the additional details section, no need to continue
+      }
+    }
+    
+    return additionalDetails;
+  }
+
   // Subscribe & Save
   function extractSubscribeSave() {
     const info = { available: false, discount: null };
@@ -616,20 +687,63 @@ function extractCompleteProductData(asin, url) {
   
     function categorizeAndStore(key, value) {
       const lk = key.toLowerCase();
-      const measurementKeys = ['dimension','weight','height','width','length','size','volume','depth','diameter','thickness','ounce','pound','inch','cm','mm','lbs','oz'];
-      const materialKeys = ['material','made','fabric','construction','care','wash','clean','color','finish','coating','surface','ingredients','component'];
+      
+      // Keep existing feature keys and logic untouched
       const featureKeys = ['feature','special','design','style','pattern','capacity','performance','function','technology','battery','power','speed','memory'];
-      const itemKeys = ['asin','model','brand','manufacturer','age','player','time','language','release','date','rank','review','rating','discontinued'];
-      if (measurementKeys.some(w => lk.includes(w))) {
-        specs.measurements[key] = value;
-      } else if (materialKeys.some(w => lk.includes(w))) {
-        specs.materials_care[key] = value;
-      } else if (featureKeys.some(w => lk.includes(w))) {
+      
+      // Define more specific patterns for each category
+      const itemDetailPatterns = [
+        /product|details?|specifications?|info|about|description/i,
+        /model|brand|manufacturer|seller|vendor|company/i,
+        /package|contents|includes|contains|comprising/i,
+        /type|category|class|classification|series/i,
+        /version|edition|release|update|variant/i,
+        /certification|approved|tested|verified|compliant/i
+      ];
+    
+      const measurementPatterns = [
+        /dimension|measurement|size|capacity|volume/i,
+        /weight|mass|density|load|pressure/i,
+        /length|width|height|depth|thickness|diameter/i,
+        /inch|cm|mm|ft|meter|pound|kg|oz|gram/i,
+        /area|square|cubic|ratio|proportion/i,
+        /temperature|degree|fahrenheit|celsius/i
+      ];
+    
+      const materialCarePatterns = [
+        /material|fabric|textile|composition|made of|construction/i,
+        /care|wash|clean|maintain|dry|iron|bleach/i,
+        /instruction|guideline|direction|recommendation/i,
+        /cotton|polyester|wool|silk|leather|metal|wood/i,
+        /surface|finish|coating|treatment|processing/i,
+        /color|dye|paint|stain|shade|tone/i
+      ];
+    
+      const additionalPatterns = [
+        /additional|extra|more|other|supplementary/i,
+        /note|tip|hint|suggestion|advice/i,
+        /benefit|advantage|feature|quality|trait/i,
+        /usage|application|purpose|function|utility/i,
+        /storage|shelf|life|duration|period/i
+      ];
+    
+      // Helper to test multiple patterns
+      const matchesAny = (text, patterns) => patterns.some(p => p.test(text));
+    
+      // Determine category based on both key and value content
+      if (featureKeys.some(w => lk.includes(w))) {
         specs.features_specs[key] = value;
-      } else if (itemKeys.some(w => lk.includes(w))) {
+      } else if (matchesAny(lk, itemDetailPatterns) || matchesAny(value, itemDetailPatterns)) {
         specs.item_details[key] = value;
-      } else {
+      } else if (matchesAny(lk, measurementPatterns) || matchesAny(value, measurementPatterns)) {
+        specs.measurements[key] = value;
+      } else if (matchesAny(lk, materialCarePatterns) || matchesAny(value, materialCarePatterns)) {
+        specs.materials_care[key] = value;
+      } else if (matchesAny(lk, additionalPatterns) || matchesAny(value, additionalPatterns)) {
         specs.additional_details[key] = value;
+      } else {
+        // Default to item_details if no specific category matches
+        specs.item_details[key] = value;
       }
     }
   
@@ -705,15 +819,37 @@ function extractCompleteProductData(asin, url) {
         }
       }
     }
+
+    // Add this new function after extractSafetyDirectionsExhaustive:
+    function extractSpecificSections() {
+      specs.directions = extractDirections();
+      specs.additional_details = extractAdditionalDetails();
+    }
   
     // ✅ Method 1: Tables
     for (const table of document.querySelectorAll('table')) {
+      // Check if table has meaningful headers
+      const hasHeaders = Array.from(table.querySelectorAll('th')).length > 0;
+      
+      // Process each row
       for (const row of table.querySelectorAll('tr')) {
         const cells = row.querySelectorAll('td, th');
         if (cells.length >= 2) {
-          const k = cells[0].textContent.trim();
-          const v = cells[1].textContent.trim();
-          if (k && v && k.length < 150) categorizeAndStore(k, v);
+          let key = cells[0].textContent.trim();
+          let value = cells[1].textContent.trim();
+          
+          // Skip empty or invalid pairs
+          if (!key || !value || key.length > 150) continue;
+          
+          // Clean the key and value
+          key = key.replace(/[:\n\r\t]+/g, ' ').trim();
+          value = value.replace(/[:\n\r\t]+/g, ' ').trim();
+          
+          // Skip non-meaningful pairs
+          if (key.toLowerCase() === value.toLowerCase()) continue;
+          if (/^\d+$/.test(key) || /^[a-z\s]+:\s*$/i.test(key)) continue;
+          
+          categorizeAndStore(key, value);
         }
       }
     }
@@ -758,7 +894,7 @@ function extractCompleteProductData(asin, url) {
     extractMaterialsExhaustive(pageText);
     extractSafetyDirectionsExhaustive(pageText);
     extractFromScripts();
-  
+    extractSpecificSections();
     return specs;
   }
   
@@ -952,164 +1088,227 @@ function extractCompleteProductData(asin, url) {
       discount : data.subscribe_save.discount ? sanitizeText(data.subscribe_save.discount) : null
     });
 
+    function extractItemDetailsJson(specs) {
+      const itemDetails = {};
     
-    function extractMeaningfulText(input) {
-        let items = [];
-        
-        // Handle array input
-        if (Array.isArray(input)) {
-            items = input;
-        } 
-        // Handle object input - extract values
-        else if (typeof input === 'object' && input !== null) {
-            items = Object.values(input);
-        }
-        // Handle string input
-        else if (typeof input === 'string') {
-            items = [input];
-        }
-        
-        const results = [];
-        
-        items.forEach(item => {
-            if (typeof item !== 'string') return;
-            
-            // Skip CSS rules, JavaScript code, and technical strings
-            if (isSkippableContent(item)) return;
-            
-            // Extract text from various patterns
-            const extractedTexts = extractTextFromString(item);
-            
-            extractedTexts.forEach(text => {
-                if (text && text.length > 10 && isMeaningfulText(text)) {
-                    results.push(text);
-                }
-            });
-        });
-        
-        // Remove duplicates and return
-        return [...new Set(results)];
-    }
-    
-    function isSkippableContent(str) {
-        // Skip CSS properties and rules
-        if (str.includes('{') && str.includes('}') && str.includes(':')) return true;
-        if (str.includes('webkit') || str.includes('flex') || str.includes('display')) return true;
-        if (str.includes('color:#') || str.includes('background-color')) return true;
-        if (str.includes('padding:') || str.includes('margin:')) return true;
-        
-        // Skip JavaScript function calls and technical strings
-        if (str.includes('setupMessageChannel') || str.includes('OnloadFallbackSetup')) return true;
-        if (str.includes('window.') || str.includes('function')) return true;
-        if (str.includes('colorToAsin') || str.includes('spin360')) return true;
-        
-        // Skip very short strings or single characters
-        if (str.length < 5) return true;
-        
-        return false;
-    }
-    
-    function extractTextFromString(str) {
-        const results = [];
-        
-        // Extract text from quotes
-        const quotedTexts = str.match(/"([^"]+)"/g);
-        if (quotedTexts) {
-            quotedTexts.forEach(quoted => {
-                const text = quoted.slice(1, -1); // Remove quotes
-                if (!isSkippableContent(text)) {
-                    results.push(text);
-                }
-            });
-        }
-        
-        // Extract text from single quotes
-        const singleQuotedTexts = str.match(/'([^']+)'/g);
-        if (singleQuotedTexts) {
-            singleQuotedTexts.forEach(quoted => {
-                const text = quoted.slice(1, -1); // Remove quotes
-                if (!isSkippableContent(text)) {
-                    results.push(text);
-                }
-            });
-        }
-        
-        // Extract plain text (not in quotes but meaningful)
-        if (!str.includes('{') && !str.includes('(') && !str.includes('function')) {
-            const cleanText = str.replace(/[{}()"';:]/g, '').trim();
-            if (cleanText && !isSkippableContent(cleanText)) {
-                results.push(cleanText);
-            }
-        }
-        
-        return results;
-    }
-    
-    function isMeaningfulText(text) {
-        // Check if text contains meaningful content
-        if (text.includes('video guides') || text.includes('product setup')) return true;
-        if (text.includes('ingredients') || text.includes('directions')) return true;
-        if (text.includes('information') || text.includes('packaging')) return true;
-        if (text.includes('tea') || text.includes('darjeeling')) return true;
-        if (text.includes('filtered water') || text.includes('boil')) return true;
-        if (text.includes('labels') || text.includes('warnings')) return true;
-        if (text.includes('consuming') || text.includes('product')) return true;
-        
-        // General checks for meaningful content
-        if (text.match(/\b(the|a|an|and|or|but|in|on|at|to|for|of|with|by)\b/i)) return true;
-        if (text.match(/[A-Z][a-z]+ [A-Z][a-z]+/)) return true; // Proper nouns
-        if (text.length > 20 && text.includes(' ')) return true; // Long sentences
-        
-        return false;
-    }
-    
-    function cleanObj(input) {
-      const result = {};
+      // First, look for the "Item details" section in prodDetails
+      const prodDetailsSection = document.querySelector('#prodDetails');
+      if (prodDetailsSection) {
+          // Find all expander containers within prodDetails
+          const expanderContainers = prodDetailsSection.querySelectorAll('div.a-expander-container');
+          
+          for (const container of expanderContainers) {
+              // Look for the expander header span that contains "Item details"
+              const headerSpan = container.querySelector('span.a-expander-prompt');
+              if (headerSpan && headerSpan.textContent.trim().toLowerCase() === 'item details') {
+                  // Found the Item details section, extract table data
+                  const table = container.querySelector('table.prodDetTable');
+                  if (table) {
+                      const rows = table.querySelectorAll('tr');
+                      rows.forEach(row => {
+                          const key = row.querySelector('th')?.textContent?.trim();
+                          const value = row.querySelector('td')?.textContent?.trim();
+                          if (key && value) {
+                              itemDetails[key] = value;
+                          }
+                      });
+                  }
+                  return JSON.stringify(itemDetails); // Found in prodDetails, return immediately
+              }
+          }
+      }
       
-      // Handle array input
-      if (Array.isArray(input)) {
-          input.forEach((item, index) => {
-              if (typeof item === 'string') {
-                    const meaningfulText = extractMeaningfulText(item);
-                    if (meaningfulText.length > 0) {
-                        // Use index as key for array items
-                        const key = `item_${index}`;
-                        result[key] = meaningfulText.join(', ').toLowerCase();
-                    }
-                }
-            });
-        }
-        // Handle object input
-        else if (typeof input === 'object' && input !== null) {
-            Object.entries(input).forEach(([key, value]) => {
-                if (typeof value === 'string') {
-                    const meaningfulText = extractMeaningfulText(value);
-                    if (meaningfulText.length > 0) {
-                        // Clean up the key
-                        const cleanKey = key.replace(/[_"']/g, '').toLowerCase();
-                        result[cleanKey] = meaningfulText.join(', ').toLowerCase();
-                    }
-                }
-            });
-        }
-        // Handle string input
-        else if (typeof input === 'string') {
-            const meaningfulText = extractMeaningfulText(input);
-            if (meaningfulText.length > 0) {
-                result['text'] = meaningfulText.join(', ').toLowerCase();
-            }
-        }
-        
-        return result;
+      // If not found in prodDetails, look for the detailBulletsWrapper_feature_div section
+      const detailBulletsSection = document.querySelector('#detailBulletsWrapper_feature_div');
+      if (detailBulletsSection) {
+          // Find all list items in the detail bullets section
+          const listItems = detailBulletsSection.querySelectorAll('ul.detail-bullet-list li');
+          
+          listItems.forEach(item => {
+              // Look for bold text (key) and regular text (value)
+              const boldElement = item.querySelector('span.a-text-bold');
+              if (boldElement) {
+                  // Extract the key by removing the colon and extra characters
+                  let key = boldElement.textContent.replace(/[:\s‏‎]+$/, '').trim();
+                  
+                  // Find the value - it's usually in the next span or directly in the item
+                  const itemText = item.textContent.trim();
+                  const keyText = boldElement.textContent.trim();
+                  
+                  // Extract value by removing the key part from the full text
+                  let value = itemText.replace(keyText, '').trim();
+                  
+                  // Handle special cases like Best Sellers Rank and Customer Reviews
+                  if (key.toLowerCase().includes('best sellers rank')) {
+                      // For Best Sellers Rank, extract just the rank numbers and categories
+                      const rankMatch = itemText.match(/#[\d,]+\s+in\s+[^(]+/g);
+                      if (rankMatch) {
+                          value = rankMatch.join(', ');
+                      }
+                  } else if (key.toLowerCase().includes('customer reviews')) {
+                      // For Customer Reviews, extract rating and count
+                      const ratingMatch = itemText.match(/(\d+\.?\d*)\s+out of \d+ stars/);
+                      const countMatch = itemText.match(/\((\d+)\)/);
+                      if (ratingMatch && countMatch) {
+                          value = `${ratingMatch[1]} out of 5 stars (${countMatch[1]} reviews)`;
+                      }
+                  }
+                  
+                  if (key && value) {
+                      itemDetails[key] = value;
+                  }
+              }
+          });
+      }
+      
+      return JSON.stringify(itemDetails);
     }
 
-    data.item_details_json       = JSON.stringify(cleanObj(specs.item_details));
-    data.measurements_json       = JSON.stringify(cleanObj(specs.measurements));
-    data.materials_care_json     = JSON.stringify(cleanObj(specs.materials_care));
-    data.features_specs_json     = JSON.stringify(cleanObj(specs.features_specs));
-    data.additional_details_json = JSON.stringify(cleanObj(specs.additional_details));
+    function extractMeasurementsJson(specs) {
+      const measurements = {};
+    
+      // Look for the parent element with id "prodDetails"
+      const prodDetailsSection = document.querySelector('#prodDetails');
+      if (!prodDetailsSection) return JSON.stringify(measurements);
+      
+      // Find all expander containers within prodDetails
+      const expanderContainers = prodDetailsSection.querySelectorAll('div.a-expander-container');
+      
+      for (const container of expanderContainers) {
+          // Look for the expander header span that contains "Measurements"
+          const headerSpan = container.querySelector('span.a-expander-prompt');
+          if (headerSpan && headerSpan.textContent.trim().toLowerCase() === 'measurements') {
+              // Found the Measurements section, extract table data
+              const table = container.querySelector('table.prodDetTable');
+              if (table) {
+                  const rows = table.querySelectorAll('tr');
+                  rows.forEach(row => {
+                      const key = row.querySelector('th')?.textContent?.trim();
+                      const value = row.querySelector('td')?.textContent?.trim();
+                      if (key && value) {
+                          measurements[key] = value;
+                      }
+                  });
+              }
+              break; // Found the measurements section, no need to continue
+          }
+      }
+      
+      return JSON.stringify(measurements);
+    }
+
+    function extractMaterialsCareJson(specs) {
+      function cleanObj(input) {
+        const result = {};
+        
+        function isItemDetail(text) {
+          const itemPatterns = [
+            /model|brand|manufacturer|part|number|asin|upc|isbn|sku|release|date|package|warranty|country|origin/i,
+            /product|dimensions|weight|specifications|details|features|description/i,
+            /compatible|compatibility|requirements|recommended|suitable/i
+          ];
+          return itemPatterns.some(pattern => pattern.test(text));
+        }
+
+        function isMaterialOrCare(text) {
+          const materialPatterns = [
+            /material|fabric|textile|composition|made from|constructed|built|contents/i,
+            /care|wash|clean|maintain|dry|iron|bleach|instructions|temperature/i,
+            /cotton|polyester|wool|silk|leather|plastic|metal|wood|glass|ceramic/i
+          ];
+          return materialPatterns.some(pattern => pattern.test(text));
+        }
+
+        function isMeasurement(text) {
+          const measurementPatterns = [
+            /\d+\s*(?:inch|in|cm|mm|ft|meter|m|kg|lb|oz|gram|g)\b/i,
+            /(?:length|width|height|depth|thickness|diameter|radius|volume|weight|size)/i,
+            /dimensions|measurements|specifications|capacity|load|pressure|temperature/i
+          ];
+          return measurementPatterns.some(pattern => pattern.test(text));
+        }
+
+        function categorizeText(text, key = '') {
+          const lowerText = text.toLowerCase();
+          const lowerKey = key.toLowerCase();
+
+          if (isItemDetail(lowerKey) || isItemDetail(lowerText)) {
+            return 'item_details';
+          } else if (isMaterialOrCare(lowerKey) || isMaterialOrCare(lowerText)) {
+            return 'materials_care';
+          } else if (isMeasurement(lowerKey) || isMeasurement(lowerText)) {
+            return 'measurements';
+          }
+          return 'additional_details';
+        }
+
+        if (Array.isArray(input)) {
+          input.forEach((item, index) => {
+            if (typeof item === 'string' && item.length > 5) {
+              const category = categorizeText(item);
+              const key = `${category}_${index + 1}`;
+              result[key] = item.toLowerCase().trim();
+            }
+          });
+        } else if (typeof input === 'object' && input !== null) {
+          Object.entries(input).forEach(([key, value]) => {
+            if (typeof value === 'string' && value.length > 5) {
+              const category = categorizeText(value, key);
+              const cleanKey = key.replace(/[^a-z0-9_]/gi, '').toLowerCase();
+              result[cleanKey] = value.toLowerCase().trim();
+            }
+          });
+        } else if (typeof input === 'string' && input.length > 5) {
+          const category = categorizeText(input);
+          result[`${category}_text`] = input.toLowerCase().trim();
+        }
+
+        return result;
+      }
+
+      return JSON.stringify(cleanObj(specs.materials_care));
+    }
+
+    function extractFeaturesSpecsJson(specs) {
+      const featuresSpecs = {};
+    
+      // Look for the parent element with id "prodDetails"
+      const prodDetailsSection = document.querySelector('#prodDetails');
+      if (!prodDetailsSection) return JSON.stringify(featuresSpecs);
+      
+      // Find all expander containers within prodDetails
+      const expanderContainers = prodDetailsSection.querySelectorAll('div.a-expander-container');
+      
+      for (const container of expanderContainers) {
+          // Look for the expander header span that contains "Features & Specs"
+          const headerSpan = container.querySelector('span.a-expander-prompt');
+          if (headerSpan && headerSpan.textContent.trim().toLowerCase() === 'features & specs') {
+              // Found the Features & Specs section, extract table data
+              const table = container.querySelector('table.prodDetTable');
+              if (table) {
+                  const rows = table.querySelectorAll('tr');
+                  rows.forEach(row => {
+                      const key = row.querySelector('th')?.textContent?.trim();
+                      const value = row.querySelector('td')?.textContent?.trim();
+                      if (key && value) {
+                          featuresSpecs[key] = value;
+                      }
+                  });
+              }
+              break; // Found the features & specs section, no need to continue
+          }
+      }
+      
+      return JSON.stringify(featuresSpecs);
+    }
+
+    data.item_details_json = extractItemDetailsJson(specs);
+    data.measurements_json = extractMeasurementsJson(specs);
+    data.materials_care_json = extractMaterialsCareJson(specs);
+    data.features_specs_json = extractFeaturesSpecsJson(specs);
     data.safety_info_json        = JSON.stringify(specs.safety_info.map(sanitizeText));
-    data.directions_json         = JSON.stringify(cleanObj(specs.directions.map(sanitizeText)));
+    data.additional_details_json = JSON.stringify(specs.additional_details);
+    data.directions_json = JSON.stringify(specs.directions);
 
 //     /**
 //  * Extracts only meaningful human-readable text values.
