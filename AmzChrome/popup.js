@@ -491,15 +491,14 @@ function extractCompleteProductData(asin, url) {
     return aplusImages;
   }
   
-  // Size & color/style variations
   function extractVariations() {
     const variations = {};
-  
+
     // Method 1: Sizes from select dropdown
     const sizeSelects = Array.from(document.querySelectorAll('select')).filter(s =>
       /(size|dropdown)/i.test(s.name)
     );
-  
+
     for (const sel of sizeSelects) {
       const opts = [];
       for (const o of sel.querySelectorAll('option')) {
@@ -511,12 +510,12 @@ function extractCompleteProductData(asin, url) {
         break;
       }
     }
-  
+
     // Method 2: Colors/styles from swatches or buttons
     const containers = Array.from(document.querySelectorAll('div, ul')).filter(el =>
       /variation.*(color|style)/i.test(el.id)
     );
-  
+
     for (const cont of containers) {
       const vals = [];
       for (const item of cont.querySelectorAll('li, span, button')) {
@@ -530,62 +529,67 @@ function extractCompleteProductData(asin, url) {
         break;
       }
     }
-  
+
     // Method 3: fallback for style names in class names
     if (!variations.colors) {
       const styleElems = Array.from(document.querySelectorAll('span, div')).filter(el =>
         /(style.*name|color.*name)/i.test(el.className)
       );
-  
+
       const styles = [];
       for (const el of styleElems) {
         const txt = el.textContent.trim();
         if (txt && txt.length < 100) styles.push(txt);
       }
-  
+
       if (styles.length) {
-        variations.styles = styles.slice(0, 15);
+        variations.colors = styles.slice(0, 15);
       }
     }
-  
-    // Method 4: Extract from page JSON inside scripts
-    const scripts = Array.from(document.querySelectorAll('script')).filter(
-      s => s.textContent && /(colorImages|dimensionValuesDisplayData|variationValues)/i.test(s.textContent)
-    );
-  
-    for (const script of scripts) {
-      try {
-        const text = script.textContent;
-  
-        // colorImages
-        const colorMatch = text.match(/"colorImages"\s*:\s*\{([^}]+)\}/i);
-        if (colorMatch) {
-          const colorPart = colorMatch[1];
-          const colorNames = Array.from(colorPart.matchAll(/"([^"]+)"\s*:/g)).map(m => m[1]);
-          if (colorNames.length) {
-            variations.colors = colorNames.slice(0, 15);
-            break;
-          }
-        }
-  
-        // dimensionValuesDisplayData for sizes
-        if (!variations.sizes) {
-          const dimMatch = text.match(/"dimensionValuesDisplayData"\s*:\s*\{([^}]+)\}/i);
-          if (dimMatch) {
-            const dimPart = dimMatch[1];
-            const sizeNames = Array.from(dimPart.matchAll(/"([^"]+)"\s*:/g)).map(m => m[1]);
-            if (sizeNames.length) {
-              variations.sizes = sizeNames.slice(0, 15);
+
+    // Method 4: Extract from page JSON inside scripts (fixed)
+    if (!variations.colors) {
+      const scripts = Array.from(document.querySelectorAll('script')).filter(
+        s => s.textContent && /(colorImages|dimensionValuesDisplayData|variationValues)/i.test(s.textContent)
+      );
+
+      for (const script of scripts) {
+        try {
+          const text = script.textContent;
+
+          // Try to find the JSON object
+          const colorImagesMatch = text.match(/"colorImages"\s*:\s*(\{.*?\})/s);
+          if (colorImagesMatch) {
+            const jsonText = `{ "colorImages": ${colorImagesMatch[1]} }`;
+            const jsonData = JSON.parse(jsonText);
+            const colorKeys = Object.keys(jsonData.colorImages);
+            if (colorKeys.length) {
+              variations.colors = colorKeys.slice(0, 15);
+              break;
             }
           }
+
+          if (!variations.sizes) {
+            const dimMatch = text.match(/"dimensionValuesDisplayData"\s*:\s*(\{.*?\})/s);
+            if (dimMatch) {
+              const jsonText = `{ "dimensionValuesDisplayData": ${dimMatch[1]} }`;
+              const jsonData = JSON.parse(jsonText);
+              const sizeKeys = Object.keys(jsonData.dimensionValuesDisplayData);
+              if (sizeKeys.length) {
+                variations.sizes = sizeKeys.slice(0, 15);
+              }
+            }
+          }
+
+        } catch (e) {
+          console.warn('JSON parse failed:', e);
+          continue;
         }
-      } catch (e) {
-        continue;
       }
     }
-  
+
     return variations;
-  }  
+  }
 
   // Subscribe & Save
   function extractSubscribeSave() {
