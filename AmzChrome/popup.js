@@ -48,7 +48,7 @@ function convertProductInfoToCSV(products) {
     'main_image_count', 'aplus_image_count', 'total_image_count',
     'main_product_images_json', 'aplus_images_json', 'features_json',
     'variations_json', 'subscribe_save_json', 'item_details_json',
-    'measurements_json', 'materials_care_json', 'features_specs_json',
+    'measurements_json', 'features_specs_json',
     'safety_info_json', 'directions_json', 'additional_details_json'
   ];
   
@@ -1304,26 +1304,11 @@ function extractCompleteProductData(asin, url) {
 
     data.item_details_json = extractItemDetailsJson(specs);
     data.measurements_json = extractMeasurementsJson(specs);
-    data.materials_care_json = extractMaterialsCareJson(specs);
+    // data.materials_care_json = extractMaterialsCareJson(specs);
     data.features_specs_json = extractFeaturesSpecsJson(specs);
     data.safety_info_json        = JSON.stringify(specs.safety_info.map(sanitizeText));
     data.additional_details_json = JSON.stringify(specs.additional_details);
     data.directions_json = JSON.stringify(specs.directions);
-
-//     /**
-//  * Extracts only meaningful human-readable text values.
-//  * Ignores anything that looks like CSS, JS, selectors, functions.
-//  * Works for arrays or objects.
-//  */
-    
-    
-//     data.item_details_json       = cleanExtractedText(data.item_details_json);
-//     data.measurements_json       = cleanExtractedText(data.measurements_json);
-//     data.materials_care_json     = cleanExtractedText(data.materials_care_json);
-//     data.features_specs_json     = cleanExtractedText(data.features_specs_json);
-//     data.additional_details_json = cleanExtractedText(data.additional_details_json);
-//     data.safety_info_json        = cleanExtractedText(data.safety_info_json);
-//     data.directions_json         = cleanExtractedText(data.directions_json);
 
     // Remove intermediate properties
     delete data.main_product_images;
